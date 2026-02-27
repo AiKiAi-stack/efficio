@@ -1,0 +1,24 @@
+# 配置
+.env
+.env.local
+.env.production
+
+# 依赖
+node_modules/
+
+# 构建输出
+dist/
+build/
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
