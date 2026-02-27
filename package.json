@@ -1,0 +1,26 @@
+{
+  "name": "efficiency-tracker",
+  "version": "0.1.0",
+  "description": "工作记录与效率分析系统 - Work Record & Efficiency Analysis System",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "npm run build:client",
+    "build:client": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "lint": "eslint . --ext .ts,.tsx"
+  },
+  "keywords": [
+    "productivity",
+    "efficiency",
+    "work-tracking",
+    "ai-analysis"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
