@@ -1,16 +1,120 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const apiKey = process.env.ANTHROPIC_API_KEY;
+// 支持多 AI Provider 配置
+interface AIProviderConfig {
+  provider: 'anthropic' | 'openai' | 'deepseek' | 'zhipu' | 'kimi';
+  apiKey?: string;
+  apiEndpoint?: string;
+  model?: string;
+}
 
+// 从环境变量读取配置
+const getProviderConfig = (): AIProviderConfig => {
+  // 优先使用配置的 provider
+  const provider = (process.env.AI_PROVIDER || 'anthropic') as AIProviderConfig['provider'];
+
+  const configs: Record<string, Partial<AIProviderConfig>> = {
+    anthropic: {
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiEndpoint: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-6'
+    },
+    openai: {
+      apiKey: process.env.OPENAI_API_KEY,
+      apiEndpoint: 'https://api.openai.com/v1',
+      model: 'gpt-4o'
+    },
+    deepseek: {
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      apiEndpoint: 'https://api.deepseek.com/v1',
+      model: 'deepseek-chat'
+    },
+    zhipu: {
+      apiKey: process.env.ZHIPU_API_KEY,
+      apiEndpoint: 'https://open.bigmodel.cn/api/paas/v4',
+      model: 'glm-4'
+    },
+    kimi: {
+      apiKey: process.env.KIMI_API_KEY,
+      apiEndpoint: 'https://api.moonshot.cn/v1',
+      model: 'moonshot-v1-8k'
+    }
+  };
+
+  return { provider, ...configs[provider] } as AIProviderConfig;
+};
+
+const config = getProviderConfig();
+
+// Anthropic 客户端
+const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
 export let anthropic: Anthropic | null = null;
-export let isAiAvailable = false;
 
-if (apiKey) {
-  anthropic = new Anthropic({ apiKey });
+if (anthropicApiKey) {
+  anthropic = new Anthropic({ apiKey: anthropicApiKey });
+}
+
+// 通用 AI 客户端（支持多 provider）
+let currentProvider: AIProviderConfig | null = null;
+let isAiAvailable = false;
+
+if (config.apiKey) {
+  currentProvider = config;
+  isAiAvailable = true;
+  console.log(`✅ AI Provider 已配置：${config.provider} (${config.model})`);
+} else if (anthropicApiKey) {
   isAiAvailable = true;
   console.log('✅ Anthropic AI 已配置');
 } else {
-  console.log('⚠️  ANTHROPIC_API_KEY 未配置，AI 功能将降级运行');
+  console.log('⚠️  AI Provider 未配置，AI 功能将降级运行');
+}
+
+export { isAiAvailable };
+
+// 获取当前配置的 provider 信息
+export function getCurrentProvider(): AIProviderConfig | null {
+  return currentProvider;
+}
+
+// 获取所有可用的 provider 配置模板
+export function getProviderTemplates(): Record<string, { name: string; envKey: string; defaultEndpoint: string; defaultModel: string; docs?: string }> {
+  return {
+    anthropic: {
+      name: 'Anthropic Claude',
+      envKey: 'ANTHROPIC_API_KEY',
+      defaultEndpoint: 'https://api.anthropic.com',
+      defaultModel: 'claude-sonnet-4-6',
+      docs: 'https://docs.anthropic.com/claude/reference/getting-started-with-the-api'
+    },
+    openai: {
+      name: 'OpenAI GPT',
+      envKey: 'OPENAI_API_KEY',
+      defaultEndpoint: 'https://api.openai.com/v1',
+      defaultModel: 'gpt-4o',
+      docs: 'https://platform.openai.com/docs/quickstart'
+    },
+    deepseek: {
+      name: 'DeepSeek (深度求索)',
+      envKey: 'DEEPSEEK_API_KEY',
+      defaultEndpoint: 'https://api.deepseek.com/v1',
+      defaultModel: 'deepseek-chat',
+      docs: 'https://platform.deepseek.com/api-docs/'
+    },
+    zhipu: {
+      name: 'Zhipu AI (智谱 AI)',
+      envKey: 'ZHIPU_API_KEY',
+      defaultEndpoint: 'https://open.bigmodel.cn/api/paas/v4',
+      defaultModel: 'glm-4',
+      docs: 'https://open.bigmodel.cn/dev/api'
+    },
+    kimi: {
+      name: 'Kimi (月之暗面)',
+      envKey: 'KIMI_API_KEY',
+      defaultEndpoint: 'https://api.moonshot.cn/v1',
+      defaultModel: 'moonshot-v1-8k',
+      docs: 'https://platform.moonshot.cn/docs/'
+    }
+  };
 }
 
 // 降级模式的 AI 分析（基于规则）

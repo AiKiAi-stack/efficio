@@ -38,6 +38,16 @@ export default function TaskTracker() {
   const [loading, setLoading] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
 
+  // 保存状态反馈
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // 显示错误提示（2 秒后消失）
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    setTimeout(() => setErrorMessage(null), 3000);
+  };
+
   // 任务历史 - 只显示当天
   const [taskHistory, setTaskHistory] = useState<TaskLog[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -99,7 +109,12 @@ export default function TaskTracker() {
   // 阶段 1: 开始任务 (Plan)
   const handleStartTask = async () => {
     if (!taskTitle.trim()) {
-      alert('请先填写任务标题！');
+      showError('请先填写任务标题');
+      return;
+    }
+
+    if (!token) {
+      showError('会话已过期，请重新登录');
       return;
     }
 
@@ -109,7 +124,7 @@ export default function TaskTracker() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token!
+          'X-User-Id': token
         },
         body: JSON.stringify({
           task_title: taskTitle,
@@ -120,23 +135,40 @@ export default function TaskTracker() {
         })
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
       const data = await res.json();
       if (data.data) {
         setCurrentTaskId(data.data.id);
         setStartTime(data.data.start_time);
         setStatus('in_progress');
+        setSaveStatus('success');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } else {
+        showError('创建任务失败');
+        setSaveStatus('error');
       }
     } catch (error) {
       console.error('Failed to start task:', error);
+      showError('网络错误，请检查连接');
+      setSaveStatus('error');
     } finally {
       setLoading(false);
+      setTimeout(() => setSaveStatus('idle'), 2000);
     }
   };
 
   // 阶段 2: 完成任务 (Do)
   const handleCompleteTask = async () => {
     if (!outcome.trim()) {
-      alert('请先填写完成内容！');
+      showError('请先填写完成内容');
+      return;
+    }
+
+    if (!token) {
+      showError('会话已过期，请重新登录');
       return;
     }
 
@@ -146,7 +178,7 @@ export default function TaskTracker() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token!
+          'X-User-Id': token
         },
         body: JSON.stringify({
           id: currentTaskId,
@@ -159,15 +191,27 @@ export default function TaskTracker() {
         })
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
       const data = await res.json();
       if (data.data) {
         setStatus('completed');
+        setSaveStatus('success');
+        setTimeout(() => setSaveStatus('idle'), 2000);
         loadTaskHistory();
+      } else {
+        showError('完成任务失败');
+        setSaveStatus('error');
       }
     } catch (error) {
       console.error('Failed to complete task:', error);
+      showError('网络错误，请检查连接');
+      setSaveStatus('error');
     } finally {
       setLoading(false);
+      setTimeout(() => setSaveStatus('idle'), 2000);
     }
   };
 
@@ -195,14 +239,18 @@ export default function TaskTracker() {
 
       const data = await res.json();
       if (data.success) {
-        alert('✅ 已保存');
+        setSaveStatus('success');
         loadTaskHistory();
+      } else {
+        setSaveStatus('error');
       }
     } catch (error) {
       console.error('Failed to save reflection:', error);
-      alert('保存失败');
+      setSaveStatus('error');
     } finally {
       setLoading(false);
+      // 2 秒后清除状态
+      setTimeout(() => setSaveStatus('idle'), 2000);
     }
   };
 
@@ -221,6 +269,14 @@ export default function TaskTracker() {
 
   return (
     <div className="space-y-4">
+      {/* 错误提示 */}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+          <span className="text-xl">⚠️</span>
+          <span className="text-sm text-red-700">{errorMessage}</span>
+        </div>
+      )}
+
       {/* 横向三阶段布局 */}
       <div className="grid grid-cols-3 gap-4">
         {/* 阶段 1: 任务设定 (Plan) */}
@@ -394,13 +450,21 @@ export default function TaskTracker() {
 
             {status === 'completed' && (
               <>
-                <button
-                  onClick={handleSaveReflection}
-                  disabled={loading}
-                  className="w-full bg-purple-600 text-white py-1.5 text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  {loading ? '保存中...' : '💾 保存反思'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveReflection}
+                    disabled={loading}
+                    className="flex-1 bg-purple-600 text-white py-1.5 text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    {loading ? '保存中...' : '💾 保存反思'}
+                  </button>
+                  {saveStatus === 'success' && (
+                    <span className="text-xl animate-pulse">✅</span>
+                  )}
+                  {saveStatus === 'error' && (
+                    <span className="text-xl animate-pulse">❌</span>
+                  )}
+                </div>
                 <button
                   onClick={handleNewTask}
                   className="w-full bg-gray-600 text-white py-1.5 text-sm rounded-lg hover:bg-gray-700 transition"

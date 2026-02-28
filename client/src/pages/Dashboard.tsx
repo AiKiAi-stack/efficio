@@ -51,6 +51,7 @@ export default function Dashboard() {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [summaryRange, setSummaryRange] = useState<{ start: string; end: string } | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -85,9 +86,14 @@ export default function Dashboard() {
   // 生成 AI 总结
   const handleGenerateSummary = async (range?: { start: string; end: string }) => {
     const token = localStorage.getItem('sessionToken');
-    if (!token) return;
+    if (!token) {
+      setSummaryError('请先登录');
+      setTimeout(() => setSummaryError(null), 3000);
+      return;
+    }
 
     setAiSummaryLoading(true);
+    setSummaryError(null);
 
     try {
       const body = range
@@ -103,14 +109,30 @@ export default function Dashboard() {
         body: JSON.stringify(body)
       });
 
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP ${res.status}`);
+      }
+
       const data = await res.json();
       if (data.data?.markdown_content) {
         setAiSummary(data.data.markdown_content);
         setSummaryRange(range || { start: body.date, end: body.date });
+      } else {
+        setSummaryError('生成失败：无返回内容');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to generate summary:', error);
-      alert('生成总结失败，请稍后重试');
+      if (error.message?.includes('401')) {
+        setSummaryError('未授权，请重新登录');
+      } else if (error.message?.includes('404')) {
+        setSummaryError('该时间段暂无记录');
+      } else if (error.message?.includes('500')) {
+        setSummaryError('服务器错误，请稍后重试');
+      } else {
+        setSummaryError(error.message || '生成总结失败，请稍后重试');
+      }
+      setTimeout(() => setSummaryError(null), 5000);
     } finally {
       setAiSummaryLoading(false);
     }
@@ -151,6 +173,20 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* 错误提示 */}
+      {summaryError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+          <span className="text-xl">⚠️</span>
+          <span className="text-sm text-red-700">{summaryError}</span>
+          <button
+            onClick={() => setSummaryError(null)}
+            className="ml-auto text-xs text-red-600 hover:text-red-800"
+          >
+            关闭
+          </button>
+        </div>
+      )}
+
       {/* AI 总结显示 */}
       {aiSummary && (
         <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg shadow p-6 border-l-4 border-purple-500">

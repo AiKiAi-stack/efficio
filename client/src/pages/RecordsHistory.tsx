@@ -48,6 +48,7 @@ export default function RecordsHistory() {
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [summaryClickCount, setSummaryClickCount] = useState(0);
   const [showRegenerate, setShowRegenerate] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -148,9 +149,13 @@ export default function RecordsHistory() {
   };
 
   const handleGenerateAISummary = async () => {
-    if (!token) return;
+    if (!token) {
+      setSummaryError('请先登录');
+      return;
+    }
 
     setAiSummaryLoading(true);
+    setSummaryError(null);
 
     let dateParam: any = {};
     if (dateRangeMode && startDate && endDate) {
@@ -169,6 +174,11 @@ export default function RecordsHistory() {
         body: JSON.stringify(dateParam)
       });
 
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP ${res.status}`);
+      }
+
       const data = await res.json();
       if (data.data?.markdown_content) {
         setAiSummary(data.data.markdown_content);
@@ -183,10 +193,21 @@ export default function RecordsHistory() {
         const newCount = summaryClickCount + 1;
         setSummaryClickCount(newCount);
         localStorage.setItem('aiSummaryClickCount', newCount.toString());
+      } else {
+        setSummaryError('生成失败：无返回内容');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to generate summary:', error);
-      alert('生成总结失败，请稍后重试');
+      if (error.message?.includes('401')) {
+        setSummaryError('未授权，请重新登录');
+      } else if (error.message?.includes('404')) {
+        setSummaryError('该时间段暂无记录');
+      } else if (error.message?.includes('500')) {
+        setSummaryError('服务器错误，请稍后重试');
+      } else {
+        setSummaryError(error.message || '生成总结失败，请稍后重试');
+      }
+      setTimeout(() => setSummaryError(null), 5000);
     } finally {
       setAiSummaryLoading(false);
     }
@@ -366,6 +387,12 @@ export default function RecordsHistory() {
         {/* AI 总结按钮 */}
         <div className="bg-white rounded-lg shadow p-4">
           <h3 className="text-sm font-semibold text-gray-800 mb-3">✨ AI 总结</h3>
+          {/* 错误提示 */}
+          {summaryError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-2 mb-3 text-xs text-red-700">
+              ⚠️ {summaryError}
+            </div>
+          )}
           <div className="space-y-2">
             <button
               onClick={handleGenerateAISummary}
