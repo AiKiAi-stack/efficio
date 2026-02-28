@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    restart: unless-stopped
+    # 资源限制 - 针对 1G 内存优化
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# 如果有本地 PostgreSQL 需求（可选，推荐使用 Supabase 云服务）
+#  db:
+#    image: postgres:15-alpine
+#    volumes:
+#      - postgres_data:/var/lib/postgresql/data
+#      - ./server/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+#    environment:
+#      - POSTGRES_DB=efficiency_tracker
+#      - POSTGRES_USER=postgres
+#      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+#    restart: unless-stopped
+#    # 资源限制
+#    deploy:
+#      resources:
+#        limits:
+#          memory: 256M
+#          cpus: '0.25'
+
+# volumes:
+#   postgres_data:

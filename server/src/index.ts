@@ -4,6 +4,11 @@ import dotenv from 'dotenv';
 import { recordsRouter } from './routes/records';
 import { authRouter } from './routes/auth';
 import { optimizeRouter } from './routes/optimize';
+import { analyzeRouter } from './routes/analyze';
+import { summariesRouter } from './routes/summaries';
+import { trendsRouter } from './routes/trends';
+import { suggestionsRouter } from './routes/suggestions';
+import { initCronJobs } from './lib/cron';
 
 dotenv.config();
 
@@ -36,6 +41,10 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/records', recordsRouter);
 app.use('/api/optimize', optimizeRouter);
+app.use('/api/analyze', analyzeRouter);
+app.use('/api/summaries', summariesRouter);
+app.use('/api/trends', trendsRouter);
+app.use('/api/suggestions', suggestionsRouter);
 
 // Error handling
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -49,4 +58,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+
+  // 初始化定时任务
+  initCronJobs();
 });

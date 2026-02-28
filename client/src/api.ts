@@ -11,6 +11,15 @@ export interface WorkRecord {
   user_id: string;
   original_text: string;
   optimized_text: string | null;
+  structured_data: {
+    task_category: string;
+    time_spent: string;
+    tools_used: string[];
+    tags: string[];
+    is_deep_work: boolean;
+    interruptions: number;
+    value_level: string;
+  } | null;
   created_at: string;
 }
 
@@ -78,6 +87,93 @@ export async function optimizeText(text: string): Promise<ApiResponse<{ original
 export async function deleteRecord(token: string, id: string): Promise<ApiResponse<{ message: string }>> {
   const response = await fetch(`${API_URL}/records/${id}`, {
     method: 'DELETE',
+  });
+  return response.json();
+}
+
+// 获取周总结
+export async function getWeeklySummaries(token: string): Promise<ApiResponse<any[]>> {
+  const response = await fetch(`${API_URL}/summaries/weekly`, {
+    headers: {
+      'X-User-Id': token,
+    },
+  });
+  return response.json();
+}
+
+// 生成周总结
+export async function generateWeeklySummary(
+  token: string,
+  weekStart: string,
+  weekEnd: string
+): Promise<ApiResponse<any>> {
+  const response = await fetch(`${API_URL}/summaries/weekly/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': token,
+    },
+    body: JSON.stringify({ week_start: weekStart, week_end: weekEnd }),
+  });
+  return response.json();
+}
+
+// 获取月趋势
+export async function getMonthlyTrends(token: string): Promise<ApiResponse<any[]>> {
+  const response = await fetch(`${API_URL}/trends/monthly`, {
+    headers: {
+      'X-User-Id': token,
+    },
+  });
+  return response.json();
+}
+
+// 生成月趋势
+export async function generateMonthlyTrend(
+  token: string,
+  year: number,
+  month: number
+): Promise<ApiResponse<any>> {
+  const response = await fetch(`${API_URL}/trends/monthly/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': token,
+    },
+    body: JSON.stringify({ year, month }),
+  });
+  return response.json();
+}
+
+// 获取优化建议
+export async function getOptimizationSuggestions(token: string): Promise<ApiResponse<any[]>> {
+  const response = await fetch(`${API_URL}/suggestions`, {
+    headers: {
+      'X-User-Id': token,
+    },
+  });
+  return response.json();
+}
+
+// 生成优化建议
+export async function generateOptimizationSuggestions(token: string): Promise<ApiResponse<any>> {
+  const response = await fetch(`${API_URL}/suggestions/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': token,
+    },
+  });
+  return response.json();
+}
+
+// 标记建议为已执行
+export async function actionSuggestion(token: string, id: string): Promise<ApiResponse<{ message: string }>> {
+  const response = await fetch(`${API_URL}/suggestions/${id}/action`, {
+    method: 'PATCH',
+    headers: {
+      'X-User-Id': token,
+    },
   });
   return response.json();
 }

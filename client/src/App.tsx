@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react';
 import { login, getRecords, createRecord, optimizeText, WorkRecord } from './api';
+import Dashboard from './pages/Dashboard';
+
+const enum Tab {
+  RECORDS = 'records',
+  DASHBOARD = 'dashboard'
+}
 
 function App() {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null);
@@ -11,6 +17,8 @@ function App() {
   const [optimizing, setOptimizing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>(Tab.RECORDS);
 
   // 检查本地存储的 session
   useEffect(() => {
@@ -76,6 +84,7 @@ function App() {
       setRecords([result.data, ...records]);
       setInputText('');
       setOptimizedText('');
+      setShowAnalysis(false);
     } else {
       setError(result.error || '保存失败');
     }
@@ -142,6 +151,28 @@ function App() {
         <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-800">效率追踪器</h1>
           <div className="flex items-center gap-4">
+            <nav className="flex gap-2">
+              <button
+                onClick={() => setActiveTab(Tab.RECORDS)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  activeTab === Tab.RECORDS
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                📝 记录
+              </button>
+              <button
+                onClick={() => setActiveTab(Tab.DASHBOARD)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  activeTab === Tab.DASHBOARD
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                📊 仪表板
+              </button>
+            </nav>
             <span className="text-sm text-gray-600">{user.email}</span>
             <button
               onClick={handleLogout}
@@ -154,12 +185,16 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-        {/* Input Section */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            记录今日工作
-          </h2>
+      <main className="max-w-5xl mx-auto px-4 py-8">
+        {activeTab === Tab.DASHBOARD ? (
+          <Dashboard />
+        ) : (
+          <>
+            {/* Input Section */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">
+                记录今日工作
+              </h2>
 
           <div className="space-y-4">
             <div>
@@ -224,8 +259,38 @@ function App() {
                   key={record.id}
                   className="border border-gray-200 rounded-lg p-4"
                 >
-                  <div className="text-sm text-gray-500 mb-2">
-                    {new Date(record.created_at).toLocaleString('zh-CN')}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm text-gray-500">
+                      {new Date(record.created_at).toLocaleString('zh-CN')}
+                    </span>
+                    {record.structured_data && (
+                      <>
+                        <span className={`px-2 py-0.5 text-xs rounded ${
+                          record.structured_data.value_level === 'high' ? 'bg-green-100 text-green-700' :
+                          record.structured_data.value_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {record.structured_data.value_level === 'high' ? '高价值' :
+                           record.structured_data.value_level === 'medium' ? '中价值' : '一般'}
+                        </span>
+                        <span className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700">
+                          {record.structured_data.time_spent}
+                        </span>
+                        <span className="px-2 py-0.5 text-xs rounded bg-purple-100 text-purple-700">
+                          {record.structured_data.task_category === 'development' ? '开发' :
+                           record.structured_data.task_category === 'meeting' ? '会议' :
+                           record.structured_data.task_category === 'communication' ? '沟通' :
+                           record.structured_data.task_category === 'documentation' ? '文档' :
+                           record.structured_data.task_category === 'review' ? '评审' :
+                           record.structured_data.task_category === 'learning' ? '学习' : '其他'}
+                        </span>
+                        {record.structured_data.is_deep_work && (
+                          <span className="px-2 py-0.5 text-xs rounded bg-indigo-100 text-indigo-700">
+                            深度工作
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <div>
@@ -238,12 +303,26 @@ function App() {
                         <p className="text-gray-800">{record.optimized_text}</p>
                       </div>
                     )}
+                    {record.structured_data && record.structured_data.tags && (
+                      <div className="flex flex-wrap gap-1 pt-2">
+                        {record.structured_data.tags.map((tag: string, i: number) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+          </>
+        )}
       </main>
     </div>
   );
