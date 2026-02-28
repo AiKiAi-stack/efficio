@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { login, getRecords, createRecord, WorkRecord } from './api';
+import { login } from './api';
 import Dashboard from './pages/Dashboard';
 import TaskTracker from './pages/TaskTracker';
 import RecordsHistory from './pages/RecordsHistory';
@@ -30,7 +30,6 @@ function App() {
     const savedToken = localStorage.getItem('sessionToken');
     if (savedUser && savedToken) {
       setUser(JSON.parse(savedUser));
-      loadRecords(savedToken);
       fetchWeather();
     }
   }, []);
@@ -101,6 +100,8 @@ function App() {
       setUser(user);
       localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('sessionToken', session_token);
+    } else {
+      alert(result.error || '登录失败');
     }
   };
 
@@ -136,16 +137,11 @@ function App() {
               />
             </div>
 
-            {error && (
-              <div className="text-red-500 text-sm text-center">{error}</div>
-            )}
-
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
             >
-              {loading ? '登录中...' : '登录'}
+              登录
             </button>
           </form>
         </div>

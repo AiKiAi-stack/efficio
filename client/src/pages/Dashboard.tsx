@@ -94,11 +94,6 @@ export default function Dashboard() {
     }, {} as { [key: string]: number })
   ).map(([name, value]) => ({ name: valueLabels[name] || name, value }));
 
-  const deepWorkData = [
-    { name: '深度工作', value: records.filter(r => r.structured_data?.is_deep_work).length },
-    { name: '浅层工作', value: records.filter(r => r.structured_data && !r.structured_data.is_deep_work).length }
-  ];
-
   // 任务统计数据
   const completedTasks = taskLogs.filter(t => t.status === 'completed');
   const totalTaskTime = completedTasks.reduce((sum, t) => sum + (t.time_spent_minutes || 0), 0);
