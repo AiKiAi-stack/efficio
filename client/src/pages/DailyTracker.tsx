@@ -1,20 +1,5 @@
 import { useState, useEffect } from 'react';
 
-interface DailyLog {
-  id: string;
-  log_date: string;
-  goals: string | null;
-  goal_priority: any | null;
-  start_time: string | null;
-  end_time: string | null;
-  accomplishments: string | null;
-  reflection: string | null;
-  lessons_learned: any | null;
-  improvement_plan: string | null;
-  mood_score: number | null;
-  energy_level: string | null;
-}
-
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export default function DailyTracker() {
@@ -25,7 +10,6 @@ export default function DailyTracker() {
   const [reflection, setReflection] = useState('');
   const [moodScore, setMoodScore] = useState(3);
   const [energyLevel, setEnergyLevel] = useState('medium');
-  const [logId, setLogId] = useState<string | null>(null);
 
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [isStarted, setIsStarted] = useState(false);
@@ -55,7 +39,6 @@ export default function DailyTracker() {
         setReflection(log.reflection || '');
         setMoodScore(log.mood_score || 3);
         setEnergyLevel(log.energy_level || 'medium');
-        setLogId(log.id);
 
         if (log.start_time) {
           setStartTime(new Date(log.start_time));
@@ -98,7 +81,6 @@ export default function DailyTracker() {
 
       const data = await res.json();
       if (data.data) {
-        setLogId(data.data.id);
         setStartTime(new Date(now));
         setIsStarted(true);
       }

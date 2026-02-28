@@ -87,6 +87,9 @@ export async function optimizeText(text: string): Promise<ApiResponse<{ original
 export async function deleteRecord(token: string, id: string): Promise<ApiResponse<{ message: string }>> {
   const response = await fetch(`${API_URL}/records/${id}`, {
     method: 'DELETE',
+    headers: {
+      'X-User-Id': token,
+    },
   });
   return response.json();
 }

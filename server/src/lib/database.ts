@@ -48,6 +48,24 @@ interface InMemoryDailyLog {
   updated_at: string;
 }
 
+interface InMemoryTaskLog {
+  id: string;
+  user_id: string;
+  task_title: string;
+  task_description: string | null;
+  task_category: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  status: string;
+  outcome: string | null;
+  reflection: string | null;
+  time_spent_minutes: number | null;
+  priority: string | null;
+  tags: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface InMemoryStore {
   users: InMemoryUser[];
   work_records: InMemoryRecord[];
@@ -55,6 +73,7 @@ interface InMemoryStore {
   monthly_trends: any[];
   optimization_suggestions: any[];
   daily_logs: InMemoryDailyLog[];
+  task_logs: InMemoryTaskLog[];
 }
 
 // 全局内存存储
@@ -64,7 +83,8 @@ const inMemoryStore: InMemoryStore = {
   weekly_summaries: [],
   monthly_trends: [],
   optimization_suggestions: [],
-  daily_logs: []
+  daily_logs: [],
+  task_logs: []
 };
 
 // 生成 UUID

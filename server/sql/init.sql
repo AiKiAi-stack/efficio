@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS work_records (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Daily Logs 表 - 存储每日 PDCA 三段式记录（新增）
+-- Daily Logs 表 - 存储每日 PDCA 三段式记录（保留用于向后兼容）
 CREATE TABLE IF NOT EXISTS daily_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -49,11 +49,42 @@ CREATE TABLE IF NOT EXISTS daily_logs (
     UNIQUE(user_id, log_date)  -- 每天一条记录
 );
 
+-- Task Logs 表 - 存储单项任务追踪（新增 - item 级别粒度）
+CREATE TABLE IF NOT EXISTS task_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    -- Plan - 任务设定
+    task_title TEXT NOT NULL,  -- 任务标题
+    task_description TEXT,  -- 任务描述
+    task_category TEXT,  -- 任务类别
+
+    -- Do - 执行追踪
+    start_time TIMESTAMPTZ,  -- 开始时间
+    end_time TIMESTAMPTZ,  -- 完成时间
+    status TEXT DEFAULT 'pending',  -- pending | in_progress | completed
+
+    -- Check/Act - 反思
+    outcome TEXT,  -- 实际结果
+    reflection TEXT,  -- 任务反思
+    time_spent_minutes INTEGER,  -- 花费时间（分钟）
+
+    -- 元数据
+    priority TEXT,  -- high/medium/low
+    tags TEXT[],  -- 标签数组
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 索引 - 加速查询
 CREATE INDEX IF NOT EXISTS idx_work_records_user_id ON work_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_work_records_created_at ON work_records(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_logs_user_id ON daily_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_daily_logs_date ON daily_logs(log_date DESC);
+CREATE INDEX IF NOT EXISTS idx_task_logs_user_id ON task_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_task_logs_created_at ON task_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_logs_status ON task_logs(status);
 
 -- Weekly Summaries 表 - 存储周总结报告
 CREATE TABLE IF NOT EXISTS weekly_summaries (

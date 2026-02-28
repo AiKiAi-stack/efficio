@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-interface Record {
+interface WorkRecord {
   id: string;
   created_at: string;
   structured_data: {
@@ -59,7 +59,7 @@ const valueLabels: Record<string, string> = {
 };
 
 export default function Dashboard() {
-  const [records, setRecords] = useState<Record[]>([]);
+  const [records, setRecords] = useState<WorkRecord[]>([]);
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [summaries, setSummaries] = useState<WeeklySummary[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -172,7 +172,7 @@ export default function Dashboard() {
       const cat = r.structured_data?.task_category || 'other';
       acc[cat] = (acc[cat] || 0) + 1;
       return acc;
-    }, {} as Record<string, number>)
+    }, {} as { [key: string]: number })
   ).map(([name, value]) => ({ name: categoryLabels[name] || name, value }));
 
   const valueLevelData = Object.entries(
@@ -180,7 +180,7 @@ export default function Dashboard() {
       const level = r.structured_data?.value_level || 'low';
       acc[level] = (acc[level] || 0) + 1;
       return acc;
-    }, {} as Record<string, number>)
+    }, {} as { [key: string]: number })
   ).map(([name, value]) => ({ name: valueLabels[name] || name, value }));
 
   const deepWorkData = [
@@ -236,7 +236,7 @@ export default function Dashboard() {
                 fill="#8884d8"
                 dataKey="value"
               >
-                {categoryData.map((entry, index) => (
+                {categoryData.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
@@ -260,7 +260,7 @@ export default function Dashboard() {
                 fill="#8884d8"
                 dataKey="value"
               >
-                {valueLevelData.map((entry, index) => (
+                {valueLevelData.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
