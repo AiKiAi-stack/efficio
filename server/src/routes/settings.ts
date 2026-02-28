@@ -41,7 +41,7 @@ settingsRouter.post('/ai-providers/:provider/test', async (req, res) => {
     const { provider } = req.params;
     const { apiKey, apiEndpoint } = req.body;
 
-    if (!apiKey) {
+    if (!apiKey && provider !== 'vllm') {
       return res.status(400).json({
         success: false,
         error: 'API Key 不能为空'
@@ -56,7 +56,6 @@ settingsRouter.post('/ai-providers/:provider/test', async (req, res) => {
         const Anthropic = (await import('@anthropic-ai/sdk')).default;
         const client = new Anthropic({ apiKey });
         try {
-          // 简单的 API 调用测试
           await client.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 10,
@@ -69,13 +68,30 @@ settingsRouter.post('/ai-providers/:provider/test', async (req, res) => {
         break;
       }
 
-      case 'openai': {
-        // 注意：需要安装 openai 包
+      case 'openai':
+      case 'deepseek':
+      case 'zhipu':
+      case 'kimi':
+      case 'nvidia':
+      case 'aliyun':
+      case 'volcengine':
+      case 'minimax': {
+        // 这些都使用 OpenAI 兼容格式
         try {
           const { OpenAI } = await import('openai');
-          const client = new OpenAI({ apiKey, baseURL: apiEndpoint });
+          const endpoint = apiEndpoint ||
+            (provider === 'deepseek' ? 'https://api.deepseek.com/v1' :
+             provider === 'zhipu' ? 'https://open.bigmodel.cn/api/paas/v4' :
+             provider === 'kimi' ? 'https://api.moonshot.cn/v1' :
+             provider === 'nvidia' ? 'https://integrate.api.nvidia.com/v1' :
+             provider === 'aliyun' ? 'https://dashscope.aliyuncs.com/compatible-mode/v1' :
+             provider === 'volcengine' ? 'https://ark.cn-beijing.volces.com/api/v3' :
+             provider === 'minimax' ? 'https://api.minimax.chat/v1' :
+             'https://api.openai.com/v1');
+
+          const client = new OpenAI({ apiKey, baseURL: endpoint });
           await client.models.list();
-          testResult = { success: true, message: 'OpenAI API 连接成功' };
+          testResult = { success: true, message: `${getProviderName(provider)} API 连接成功` };
         } catch (error: any) {
           if (error.code === 'MODULE_NOT_FOUND') {
             testResult = { success: false, message: '未安装 openai 包，请运行：npm install openai' };
@@ -86,41 +102,22 @@ settingsRouter.post('/ai-providers/:provider/test', async (req, res) => {
         break;
       }
 
-      case 'deepseek': {
-        // DeepSeek 使用 OpenAI 兼容格式
+      case 'vllm': {
+        // vLLM 自部署服务，使用 OpenAI 兼容格式
         try {
           const { OpenAI } = await import('openai');
-          const client = new OpenAI({ apiKey, baseURL: apiEndpoint || 'https://api.deepseek.com/v1' });
+          const endpoint = apiEndpoint || 'http://localhost:8000/v1';
+          const client = new OpenAI({ apiKey: apiKey || 'vllm', baseURL: endpoint });
           await client.models.list();
-          testResult = { success: true, message: 'DeepSeek API 连接成功' };
+          testResult = { success: true, message: 'vLLM 服务连接成功' };
         } catch (error: any) {
-          testResult = { success: false, message: `连接失败：${error.message}` };
-        }
-        break;
-      }
-
-      case 'zhipu': {
-        // 智谱 AI 也需要专用 SDK 或使用 OpenAI 兼容
-        try {
-          const { OpenAI } = await import('openai');
-          const client = new OpenAI({ apiKey, baseURL: apiEndpoint || 'https://open.bigmodel.cn/api/paas/v4' });
-          await client.models.list();
-          testResult = { success: true, message: 'Zhipu API 连接成功' };
-        } catch (error: any) {
-          testResult = { success: false, message: `连接失败：${error.message}` };
-        }
-        break;
-      }
-
-      case 'kimi': {
-        // Kimi 也使用 OpenAI 兼容格式
-        try {
-          const { OpenAI } = await import('openai');
-          const client = new OpenAI({ apiKey, baseURL: apiEndpoint || 'https://api.moonshot.cn/v1' });
-          await client.models.list();
-          testResult = { success: true, message: 'Kimi API 连接成功' };
-        } catch (error: any) {
-          testResult = { success: false, message: `连接失败：${error.message}` };
+          if (error.code === 'MODULE_NOT_FOUND') {
+            testResult = { success: false, message: '未安装 openai 包，请运行：npm install openai' };
+          } else if (error.message?.includes('connect') || error.message?.includes('ECONNREFUSED')) {
+            testResult = { success: false, message: '无法连接到 vLLM 服务，请确认服务已启动' };
+          } else {
+            testResult = { success: false, message: `连接失败：${error.message}` };
+          }
         }
         break;
       }
@@ -141,6 +138,21 @@ settingsRouter.post('/ai-providers/:provider/test', async (req, res) => {
     });
   }
 });
+
+// 辅助函数：获取 Provider 中文名称
+function getProviderName(key: string): string {
+  const names: Record<string, string> = {
+    openai: 'OpenAI',
+    deepseek: 'DeepSeek',
+    zhipu: '智谱 AI',
+    kimi: 'Kimi',
+    nvidia: 'NVIDIA',
+    aliyun: '阿里云',
+    volcengine: '火山引擎',
+    minimax: 'MiniMax'
+  };
+  return names[key] || key;
+}
 
 // 获取环境变量配置（仅用于前端设置页面）
 settingsRouter.get('/env-keys', (req, res) => {

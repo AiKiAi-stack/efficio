@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 
 // 支持多 AI Provider 配置
 interface AIProviderConfig {
-  provider: 'anthropic' | 'openai' | 'deepseek' | 'zhipu' | 'kimi';
+  provider: 'anthropic' | 'openai' | 'deepseek' | 'zhipu' | 'kimi' | 'nvidia' | 'vllm' | 'aliyun' | 'volcengine' | 'minimax';
   apiKey?: string;
   apiEndpoint?: string;
   model?: string;
@@ -38,6 +38,32 @@ const getProviderConfig = (): AIProviderConfig => {
       apiKey: process.env.KIMI_API_KEY,
       apiEndpoint: 'https://api.moonshot.cn/v1',
       model: 'moonshot-v1-8k'
+    },
+    // 新增 Provider 配置
+    nvidia: {
+      apiKey: process.env.NVIDIA_API_KEY,
+      apiEndpoint: 'https://integrate.api.nvidia.com/v1',
+      model: 'meta/llama3-70b-instruct'
+    },
+    vllm: {
+      apiKey: process.env.VLLM_API_KEY || 'vllm', // vLLM 默认不需要 API Key
+      apiEndpoint: process.env.VLLM_ENDPOINT || 'http://localhost:8000/v1',
+      model: process.env.VLLM_MODEL || 'default'
+    },
+    aliyun: {
+      apiKey: process.env.ALIYUN_API_KEY,
+      apiEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      model: 'qwen-plus'
+    },
+    volcengine: {
+      apiKey: process.env.VOLCENGINE_API_KEY,
+      apiEndpoint: 'https://ark.cn-beijing.volces.com/api/v3',
+      model: 'doubao-pro-4k'
+    },
+    minimax: {
+      apiKey: process.env.MINIMAX_API_KEY,
+      apiEndpoint: 'https://api.minimax.chat/v1',
+      model: 'abab6.5-chat'
     }
   };
 
@@ -77,42 +103,88 @@ export function getCurrentProvider(): AIProviderConfig | null {
 }
 
 // 获取所有可用的 provider 配置模板
-export function getProviderTemplates(): Record<string, { name: string; envKey: string; defaultEndpoint: string; defaultModel: string; docs?: string }> {
+export function getProviderTemplates(): Record<string, { name: string; envKey: string; defaultEndpoint: string; defaultModel: string; docs?: string; description?: string }> {
   return {
     anthropic: {
       name: 'Anthropic Claude',
       envKey: 'ANTHROPIC_API_KEY',
       defaultEndpoint: 'https://api.anthropic.com',
       defaultModel: 'claude-sonnet-4-6',
-      docs: 'https://docs.anthropic.com/claude/reference/getting-started-with-the-api'
+      docs: 'https://docs.anthropic.com/claude/reference/getting-started-with-the-api',
+      description: '美国 AI 公司，Claude 系列模型'
     },
     openai: {
       name: 'OpenAI GPT',
       envKey: 'OPENAI_API_KEY',
       defaultEndpoint: 'https://api.openai.com/v1',
       defaultModel: 'gpt-4o',
-      docs: 'https://platform.openai.com/docs/quickstart'
+      docs: 'https://platform.openai.com/docs/quickstart',
+      description: '美国 AI 公司，GPT-4/ChatGPT'
     },
     deepseek: {
       name: 'DeepSeek (深度求索)',
       envKey: 'DEEPSEEK_API_KEY',
       defaultEndpoint: 'https://api.deepseek.com/v1',
       defaultModel: 'deepseek-chat',
-      docs: 'https://platform.deepseek.com/api-docs/'
+      docs: 'https://platform.deepseek.com/api-docs/',
+      description: '国产大模型，性价比高'
     },
     zhipu: {
       name: 'Zhipu AI (智谱 AI)',
       envKey: 'ZHIPU_API_KEY',
       defaultEndpoint: 'https://open.bigmodel.cn/api/paas/v4',
       defaultModel: 'glm-4',
-      docs: 'https://open.bigmodel.cn/dev/api'
+      docs: 'https://open.bigmodel.cn/dev/api',
+      description: '国产 GLM 系列大模型'
     },
     kimi: {
       name: 'Kimi (月之暗面)',
       envKey: 'KIMI_API_KEY',
       defaultEndpoint: 'https://api.moonshot.cn/v1',
       defaultModel: 'moonshot-v1-8k',
-      docs: 'https://platform.moonshot.cn/docs/'
+      docs: 'https://platform.moonshot.cn/docs/',
+      description: '国产大模型，长文本处理'
+    },
+    // 新增 Provider
+    nvidia: {
+      name: 'NVIDIA NIM',
+      envKey: 'NVIDIA_API_KEY',
+      defaultEndpoint: 'https://integrate.api.nvidia.com/v1',
+      defaultModel: 'meta/llama3-70b-instruct',
+      docs: 'https://docs.api.nvidia.com/nim/',
+      description: 'NVIDIA GPU 云，提供 Llama 等模型'
+    },
+    vllm: {
+      name: 'vLLM (自部署)',
+      envKey: 'VLLM_API_KEY',
+      defaultEndpoint: 'http://localhost:8000/v1',
+      defaultModel: 'default',
+      docs: 'https://docs.vllm.ai/en/stable/',
+      description: '开源模型推理框架，需自部署'
+    },
+    aliyun: {
+      name: '阿里云百炼 (通义千问)',
+      envKey: 'ALIYUN_API_KEY',
+      defaultEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      defaultModel: 'qwen-plus',
+      docs: 'https://help.aliyun.com/zh/dashscope/',
+      description: '阿里云通义千问 Qwen 系列'
+    },
+    volcengine: {
+      name: '火山引擎 (豆包)',
+      envKey: 'VOLCENGINE_API_KEY',
+      defaultEndpoint: 'https://ark.cn-beijing.volces.com/api/v3',
+      defaultModel: 'doubao-pro-4k',
+      docs: 'https://www.volcengine.com/docs/82379',
+      description: '火山引擎豆包/方舟大模型'
+    },
+    minimax: {
+      name: 'MiniMax',
+      envKey: 'MINIMAX_API_KEY',
+      defaultEndpoint: 'https://api.minimax.chat/v1',
+      defaultModel: 'abab6.5-chat',
+      docs: 'https://platform.minimaxi.com/document/guides',
+      description: '国产 MiniMax 大模型'
     }
   };
 }

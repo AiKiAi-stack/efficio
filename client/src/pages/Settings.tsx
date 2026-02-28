@@ -57,20 +57,47 @@ export default function Settings() {
 
     try {
       const provider = providers.find(p => p.key === providerKey);
+
+      // 获取 API Key 的环境变量名
+      const getEnvKey = () => {
+        const envMap: Record<string, string> = {
+          anthropic: 'ANTHROPIC_API_KEY',
+          openai: 'OPENAI_API_KEY',
+          deepseek: 'DEEPSEEK_API_KEY',
+          zhipu: 'ZHIPU_API_KEY',
+          kimi: 'KIMI_API_KEY',
+          nvidia: 'NVIDIA_API_KEY',
+          vllm: 'VLLM_API_KEY',
+          aliyun: 'ALIYUN_API_KEY',
+          volcengine: 'VOLCENGINE_API_KEY',
+          minimax: 'MINIMAX_API_KEY'
+        };
+        return envMap[providerKey] || 'API_KEY';
+      };
+
+      // 获取 Endpoint
+      const getEndpoint = () => {
+        const endpoints: Record<string, string> = {
+          deepseek: 'https://api.deepseek.com/v1',
+          zhipu: 'https://open.bigmodel.cn/api/paas/v4',
+          kimi: 'https://api.moonshot.cn/v1',
+          nvidia: 'https://integrate.api.nvidia.com/v1',
+          vllm: 'http://localhost:8000/v1',
+          aliyun: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          volcengine: 'https://ark.cn-beijing.volces.com/api/v3',
+          minimax: 'https://api.minimax.chat/v1'
+        };
+        return endpoints[providerKey];
+      };
+
       const res = await fetch(`${API_URL}/settings/ai-providers/${providerKey}/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          apiKey: process.env[provider?.key === 'anthropic' ? 'ANTHROPIC_API_KEY' :
-                              provider?.key === 'openai' ? 'OPENAI_API_KEY' :
-                              provider?.key === 'deepseek' ? 'DEEPSEEK_API_KEY' :
-                              provider?.key === 'zhipu' ? 'ZHIPU_API_KEY' :
-                              'KIMI_API_KEY'] || '',
-          apiEndpoint: provider?.key === 'deepseek' ? 'https://api.deepseek.com/v1' :
-                       provider?.key === 'zhipu' ? 'https://open.bigmodel.cn/api/paas/v4' :
-                       provider?.key === 'kimi' ? 'https://api.moonshot.cn/v1' : undefined
+          apiKey: process.env[getEnvKey()] || '',
+          apiEndpoint: getEndpoint()
         })
       });
 
@@ -90,6 +117,19 @@ export default function Settings() {
   };
 
   const handleSaveConfig = () => {
+    const envMap: Record<string, string> = {
+      anthropic: 'ANTHROPIC_API_KEY',
+      openai: 'OPENAI_API_KEY',
+      deepseek: 'DEEPSEEK_API_KEY',
+      zhipu: 'ZHIPU_API_KEY',
+      kimi: 'KIMI_API_KEY',
+      nvidia: 'NVIDIA_API_KEY',
+      vllm: 'VLLM_API_KEY',
+      aliyun: 'ALIYUN_API_KEY',
+      volcengine: 'VOLCENGINE_API_KEY',
+      minimax: 'MINIMAX_API_KEY'
+    };
+
     // 提示用户需要在服务器端配置环境变量
     alert(`配置保存提示：
 
@@ -97,13 +137,11 @@ export default function Settings() {
 
 请编辑服务器端的 .env 文件，添加以下配置：
 
-${editingProvider === 'anthropic' ? 'ANTHROPIC_API_KEY=your_api_key_here' :
-  editingProvider === 'openai' ? 'OPENAI_API_KEY=your_api_key_here' :
-  editingProvider === 'deepseek' ? 'DEEPSEEK_API_KEY=your_api_key_here' :
-  editingProvider === 'zhipu' ? 'ZHIPU_API_KEY=your_api_key_here' :
-  'KIMI_API_KEY=your_api_key_here'}
+${envMap[editingProvider || 'anthropic']}=your_api_key_here
 
-然后重启服务器使配置生效。`);
+然后重启服务器使配置生效。
+
+如需配置其他参数（如 Endpoint、Model），请参考 .env.example 文件。`);
     setEditingProvider(null);
   };
 
