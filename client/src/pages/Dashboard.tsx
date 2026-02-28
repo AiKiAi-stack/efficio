@@ -12,6 +12,16 @@ interface Record {
   } | null;
 }
 
+interface DailyLog {
+  id: string;
+  log_date: string;
+  goals: string | null;
+  accomplishments: string | null;
+  reflection: string | null;
+  mood_score: number | null;
+  energy_level: string | null;
+}
+
 interface WeeklySummary {
   id: string;
   week_start: string;
@@ -50,6 +60,7 @@ const valueLabels: Record<string, string> = {
 
 export default function Dashboard() {
   const [records, setRecords] = useState<Record[]>([]);
+  const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
   const [summaries, setSummaries] = useState<WeeklySummary[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +82,15 @@ export default function Dashboard() {
     const recordsData = await recordsRes.json();
     if (recordsData.data) {
       setRecords(recordsData.data);
+    }
+
+    // 加载每日追踪
+    const dailyLogsRes = await fetch('/api/daily-logs/history?days=7', {
+      headers: { 'X-User-Id': token }
+    });
+    const dailyLogsData = await dailyLogsRes.json();
+    if (dailyLogsData.data) {
+      setDailyLogs(dailyLogsData.data);
     }
 
     // 加载周总结
@@ -289,6 +309,38 @@ export default function Dashboard() {
               {summaries.length}
             </div>
             <div className="text-sm text-gray-600 mt-1">周总结</div>
+          </div>
+        </div>
+
+        {/* 每日追踪统计 */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <h4 className="text-md font-semibold text-gray-700 mb-4">🎯 每日追踪统计</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-pink-50 rounded-lg">
+              <div className="text-2xl font-bold text-pink-600">{dailyLogs.length}</div>
+              <div className="text-sm text-gray-600 mt-1">追踪天数</div>
+            </div>
+            <div className="text-center p-4 bg-yellow-50 rounded-lg">
+              <div className="text-2xl font-bold text-yellow-600">
+                {dailyLogs.filter(l => l.goals && l.accomplishments).length}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">完成目标</div>
+            </div>
+            <div className="text-center p-4 bg-indigo-50 rounded-lg">
+              <div className="text-2xl font-bold text-indigo-600">
+                {dailyLogs.filter(l => l.reflection).length}
+              </div>
+              <div className="text-sm text-gray-600 mt-1">反思次数</div>
+            </div>
+            <div className="text-center p-4 bg-teal-50 rounded-lg">
+              <div className="text-2xl font-bold text-teal-600">
+                {dailyLogs.length > 0
+                  ? (dailyLogs.reduce((sum, l) => sum + (l.mood_score || 0), 0) / dailyLogs.length).toFixed(1)
+                  : '0'
+                }
+              </div>
+              <div className="text-sm text-gray-600 mt-1">平均心情 (1-5)</div>
+            </div>
           </div>
         </div>
       </div>
