@@ -29,6 +29,28 @@
 
 ## 🚀 快速开始
 
+### 方式一：Docker 部署（推荐）
+
+```bash
+# 复制环境变量
+cp .env.example .env
+
+# 编辑 .env 填入配置
+# - SUPABASE_URL
+# - SUPABASE_SERVICE_KEY
+# - ANTHROPIC_API_KEY
+
+# 启动服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+```
+
+访问 http://localhost:3001
+
+### 方式二：开发模式
+
 ### 1. 环境准备
 
 ```bash
@@ -76,18 +98,32 @@ efficiency-tracker/
 │   ├── src/
 │   │   ├── App.tsx
 │   │   ├── api.ts
-│   │   └── ...
+│   │   └── pages/
+│   │       └── Dashboard.tsx
 │   ├── package.json
 │   └── vite.config.ts
 ├── server/              # 后端 Express 服务
 │   ├── src/
 │   │   ├── routes/
+│   │   │   ├── auth.ts
+│   │   │   ├── records.ts
+│   │   │   ├── optimize.ts
+│   │   │   ├── analyze.ts
+│   │   │   ├── summaries.ts
+│   │   │   ├── trends.ts
+│   │   │   └── suggestions.ts
 │   │   ├── lib/
+│   │   │   ├── database.ts
+│   │   │   ├── ai.ts
+│   │   │   └── cron.ts
 │   │   └── index.ts
 │   ├── sql/
 │   │   └── init.sql
 │   └── package.json
-├── package.json         # 根配置
+├── docker-compose.yml   # Docker 编排
+├── Dockerfile          # Docker 镜像
+├── DEPLOY.md          # 部署文档
+├── .env.example       # 环境变量示例
 └── README.md
 ```
 
@@ -98,25 +134,39 @@ efficiency-tracker/
 
 ### 工作记录
 - `GET /api/records` - 获取记录列表
-- `POST /api/records` - 创建新记录
+- `POST /api/records` - 创建新记录（含自动 AI 分析）
 - `GET /api/records/:id` - 获取单条记录
 - `DELETE /api/records/:id` - 删除记录
 
-### AI 优化
+### AI 功能
 - `POST /api/optimize` - AI 文本优化
+- `POST /api/analyze` - AI 结构化分析
+
+### 周总结
+- `GET /api/summaries/weekly` - 获取周总结列表
+- `POST /api/summaries/weekly/generate` - 生成周总结
+
+### 月趋势
+- `GET /api/trends/monthly` - 获取月趋势列表
+- `POST /api/trends/monthly/generate` - 生成月趋势
+
+### 优化建议
+- `GET /api/suggestions` - 获取优化建议
+- `POST /api/suggestions/generate` - 生成优化建议
+- `PATCH /api/suggestions/:id/action` - 标记建议为已执行
 
 ## 📅 开发计划
 
 参见 [design.md](./design.md)
 
-| 阶段 | 时间 | 内容 |
-|------|------|------|
-| Phase 1 | Week 1-2 | MVP - 基础记录系统 |
-| Phase 2 | Week 3-4 | 结构化数据抽取 |
-| Phase 3 | Week 5-6 | 周总结 Agent |
-| Phase 4 | Week 7-8 | 月趋势分析 |
-| Phase 5 | Week 9-10 | Dashboard |
-| Phase 6 | Week 11-12 | 优化建议 |
+| 阶段 | 时间 | 内容 | 状态 |
+|------|------|------|------|
+| Phase 1 | Week 1-2 | MVP - 基础记录系统 | ✅ 完成 |
+| Phase 2 | Week 3-4 | 结构化数据抽取 | ✅ 完成 |
+| Phase 3 | Week 5-6 | 周总结 Agent | ✅ 完成 |
+| Phase 4 | Week 7-8 | 月趋势分析 | ✅ 完成 |
+| Phase 5 | Week 9-10 | Dashboard | ✅ 完成 |
+| Phase 6 | Week 11-12 | 优化建议 | ✅ 完成 |
 
 ## 📝 设计原则
 
