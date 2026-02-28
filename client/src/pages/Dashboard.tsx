@@ -47,6 +47,11 @@ export default function Dashboard() {
   const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // AI 总结状态
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [summaryRange, setSummaryRange] = useState<{ start: string; end: string } | null>(null);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -77,6 +82,40 @@ export default function Dashboard() {
     setLoading(false);
   };
 
+  // 生成 AI 总结
+  const handleGenerateSummary = async (range?: { start: string; end: string }) => {
+    const token = localStorage.getItem('sessionToken');
+    if (!token) return;
+
+    setAiSummaryLoading(true);
+
+    try {
+      const body = range
+        ? { start_date: range.start, end_date: range.end }
+        : { date: new Date().toISOString().split('T')[0] };
+
+      const res = await fetch('/api/summaries/range', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': token
+        },
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json();
+      if (data.data?.markdown_content) {
+        setAiSummary(data.data.markdown_content);
+        setSummaryRange(range || { start: body.date, end: body.date });
+      }
+    } catch (error) {
+      console.error('Failed to generate summary:', error);
+      alert('生成总结失败，请稍后重试');
+    } finally {
+      setAiSummaryLoading(false);
+    }
+  };
+
   // 计算图表数据
   const categoryData = Object.entries(
     records.reduce((acc, r) => {
@@ -105,19 +144,81 @@ export default function Dashboard() {
     { name: '低优先级', value: taskLogs.filter(t => t.priority === 'low').length }
   ];
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">加载仪表板中...</div>
-      </div>
-    );
-  }
+  // 日期范围选择状态
+  const [showSummaryRange, setShowSummaryRange] = useState(false);
+  const [summaryStart, setSummaryStart] = useState('');
+  const [summaryEnd, setSummaryEnd] = useState('');
 
   return (
     <div className="space-y-6">
+      {/* AI 总结显示 */}
+      {aiSummary && (
+        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg shadow p-6 border-l-4 border-purple-500">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-purple-800">📊 AI 总结报告</h3>
+            <button
+              onClick={() => setAiSummary(null)}
+              className="text-xs text-purple-600 hover:text-purple-800"
+            >
+              收起
+            </button>
+          </div>
+          <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans bg-white p-4 rounded">
+            {aiSummary}
+          </pre>
+        </div>
+      )}
+
       {/* 统计摘要 */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 总体统计</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">📈 总体统计</h3>
+          <div className="flex items-center gap-2">
+            {!showSummaryRange ? (
+              <button
+                onClick={() => setShowSummaryRange(true)}
+                className="px-3 py-1.5 text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition"
+              >
+                ✨ 生成 AI 总结
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={summaryStart}
+                  onChange={(e) => setSummaryStart(e.target.value)}
+                  className="px-2 py-1 text-sm border border-gray-300 rounded"
+                />
+                <span className="text-gray-500">至</span>
+                <input
+                  type="date"
+                  value={summaryEnd}
+                  onChange={(e) => setSummaryEnd(e.target.value)}
+                  className="px-2 py-1 text-sm border border-gray-300 rounded"
+                />
+                <button
+                  onClick={() => {
+                    if (summaryStart && summaryEnd) {
+                      handleGenerateSummary({ start: summaryStart, end: summaryEnd });
+                    } else {
+                      handleGenerateSummary();
+                    }
+                    setShowSummaryRange(false);
+                  }}
+                  className="px-3 py-1.5 text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition"
+                >
+                  {aiSummaryLoading ? '生成中...' : '生成'}
+                </button>
+                <button
+                  onClick={() => setShowSummaryRange(false)}
+                  className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+                >
+                  取消
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center p-4 bg-blue-50 rounded-lg">
             <div className="text-2xl font-bold text-blue-600">{records.length}</div>
