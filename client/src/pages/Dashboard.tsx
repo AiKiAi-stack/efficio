@@ -12,32 +12,16 @@ interface WorkRecord {
   } | null;
 }
 
-interface DailyLog {
+interface TaskLog {
   id: string;
-  log_date: string;
-  goals: string | null;
-  accomplishments: string | null;
+  task_title: string;
+  task_category: string | null;
+  status: 'pending' | 'in_progress' | 'completed';
+  outcome: string | null;
   reflection: string | null;
-  mood_score: number | null;
-  energy_level: string | null;
-}
-
-interface WeeklySummary {
-  id: string;
-  week_start: string;
-  markdown_content: string;
-}
-
-interface Suggestion {
-  id: string;
-  suggestion_data: {
-    title: string;
-    category: string;
-    priority: string;
-    why: string;
-    how: string;
-  };
-  is_actioned: boolean;
+  time_spent_minutes: number | null;
+  priority: string | null;
+  created_at: string;
 }
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6B7280'];
@@ -60,11 +44,8 @@ const valueLabels: Record<string, string> = {
 
 export default function Dashboard() {
   const [records, setRecords] = useState<WorkRecord[]>([]);
-  const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
-  const [summaries, setSummaries] = useState<WeeklySummary[]>([]);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState<'week' | 'month' | 'suggestion' | null>(null);
 
   useEffect(() => {
     loadData();
@@ -84,86 +65,16 @@ export default function Dashboard() {
       setRecords(recordsData.data);
     }
 
-    // 加载每日追踪
-    const dailyLogsRes = await fetch('/api/daily-logs/history?days=7', {
+    // 加载任务日志
+    const taskLogsRes = await fetch('/api/task-logs', {
       headers: { 'X-User-Id': token }
     });
-    const dailyLogsData = await dailyLogsRes.json();
-    if (dailyLogsData.data) {
-      setDailyLogs(dailyLogsData.data);
-    }
-
-    // 加载周总结
-    const summariesRes = await fetch('/api/summaries/weekly', {
-      headers: { 'X-User-Id': token }
-    });
-    const summariesData = await summariesRes.json();
-    if (summariesData.data) {
-      setSummaries(summariesData.data);
-    }
-
-    // 加载建议
-    const suggestionsRes = await fetch('/api/suggestions', {
-      headers: { 'X-User-Id': token }
-    });
-    const suggestionsData = await suggestionsRes.json();
-    if (suggestionsData.data) {
-      setSuggestions(suggestionsData.data);
+    const taskLogsData = await taskLogsRes.json();
+    if (taskLogsData.data) {
+      setTaskLogs(taskLogsData.data);
     }
 
     setLoading(false);
-  };
-
-  const handleGenerateWeekly = async () => {
-    setGenerating('week');
-    const token = localStorage.getItem('sessionToken');
-    if (!token) return;
-
-    // 计算本周一和周日
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const monday = new Date(now.setDate(diff));
-    const sunday = new Date(now.setDate(monday.getDate() + 6));
-
-    const res = await fetch('/api/summaries/weekly/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': token,
-      },
-      body: JSON.stringify({
-        week_start: monday.toISOString().split('T')[0],
-        week_end: sunday.toISOString().split('T')[0]
-      })
-    });
-
-    const data = await res.json();
-    if (data.data) {
-      setSummaries([data.data, ...summaries]);
-    }
-    setGenerating(null);
-  };
-
-  const handleGenerateSuggestions = async () => {
-    setGenerating('suggestion');
-    const token = localStorage.getItem('sessionToken');
-    if (!token) return;
-
-    const res = await fetch('/api/suggestions/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': token,
-      }
-    });
-
-    const data = await res.json();
-    if (data.data?.suggestions) {
-      // 重新加载建议列表
-      await loadData();
-    }
-    setGenerating(null);
   };
 
   // 计算图表数据
@@ -188,6 +99,17 @@ export default function Dashboard() {
     { name: '浅层工作', value: records.filter(r => r.structured_data && !r.structured_data.is_deep_work).length }
   ];
 
+  // 任务统计数据
+  const completedTasks = taskLogs.filter(t => t.status === 'completed');
+  const totalTaskTime = completedTasks.reduce((sum, t) => sum + (t.time_spent_minutes || 0), 0);
+
+  // 按优先级统计任务
+  const priorityData = [
+    { name: '高优先级', value: taskLogs.filter(t => t.priority === 'high').length },
+    { name: '中优先级', value: taskLogs.filter(t => t.priority === 'medium').length },
+    { name: '低优先级', value: taskLogs.filter(t => t.priority === 'low').length }
+  ];
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -197,25 +119,27 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* 快速操作 */}
+    <div className="space-y-6">
+      {/* 统计摘要 */}
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">📊 分析工具</h2>
-        <div className="flex gap-3 flex-wrap">
-          <button
-            onClick={handleGenerateWeekly}
-            disabled={generating === 'week'}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
-          >
-            {generating === 'week' ? '生成中...' : '生成本周总结'}
-          </button>
-          <button
-            onClick={handleGenerateSuggestions}
-            disabled={generating === 'suggestion'}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition"
-          >
-            {generating === 'suggestion' ? '生成中...' : '生成优化建议'}
-          </button>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 总体统计</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center p-4 bg-blue-50 rounded-lg">
+            <div className="text-2xl font-bold text-blue-600">{records.length}</div>
+            <div className="text-sm text-gray-600 mt-1">工作记录</div>
+          </div>
+          <div className="text-center p-4 bg-green-50 rounded-lg">
+            <div className="text-2xl font-bold text-green-600">{completedTasks.length}</div>
+            <div className="text-sm text-gray-600 mt-1">完成任务</div>
+          </div>
+          <div className="text-center p-4 bg-purple-50 rounded-lg">
+            <div className="text-2xl font-bold text-purple-600">{records.filter(r => r.structured_data?.value_level === 'high').length}</div>
+            <div className="text-sm text-gray-600 mt-1">高价值工作</div>
+          </div>
+          <div className="text-center p-4 bg-orange-50 rounded-lg">
+            <div className="text-2xl font-bold text-orange-600">{Math.round(totalTaskTime / 60 * 10) / 10}h</div>
+            <div className="text-sm text-gray-600 mt-1">任务总时长</div>
+          </div>
         </div>
       </div>
 
@@ -269,11 +193,11 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* 深度工作 vs 浅层工作 */}
+        {/* 任务优先级分布 */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-md font-semibold text-gray-800 mb-4">🎯 工作深度分布</h3>
+          <h3 className="text-md font-semibold text-gray-800 mb-4">🎯 任务优先级分布</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={deepWorkData}>
+            <BarChart data={priorityData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
@@ -284,121 +208,53 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 统计摘要 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 统计摘要</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center p-4 bg-blue-50 rounded-lg">
-            <div className="text-2xl font-bold text-blue-600">{records.length}</div>
-            <div className="text-sm text-gray-600 mt-1">总记录数</div>
-          </div>
-          <div className="text-center p-4 bg-green-50 rounded-lg">
-            <div className="text-2xl font-bold text-green-600">
-              {records.filter(r => r.structured_data?.value_level === 'high').length}
-            </div>
-            <div className="text-sm text-gray-600 mt-1">高价值工作</div>
-          </div>
-          <div className="text-center p-4 bg-purple-50 rounded-lg">
-            <div className="text-2xl font-bold text-purple-600">
-              {records.filter(r => r.structured_data?.is_deep_work).length}
-            </div>
-            <div className="text-sm text-gray-600 mt-1">深度工作</div>
-          </div>
-          <div className="text-center p-4 bg-orange-50 rounded-lg">
-            <div className="text-2xl font-bold text-orange-600">
-              {summaries.length}
-            </div>
-            <div className="text-sm text-gray-600 mt-1">周总结</div>
+      {/* 最近完成的任务 */}
+      {completedTasks.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">✅ 最近完成的任务</h3>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {completedTasks.slice(0, 10).map((task) => (
+              <div key={task.id} className="border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-800">{task.task_title}</span>
+                  <div className="flex items-center gap-2">
+                    {task.priority && (
+                      <span className={`px-2 py-0.5 text-xs rounded ${
+                        task.priority === 'high' ? 'bg-red-100 text-red-700' :
+                        task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {task.priority === 'high' ? '高' : task.priority === 'medium' ? '中' : '低'}
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-500">
+                      {task.time_spent_minutes ? `${task.time_spent_minutes}分钟` : ''}
+                    </span>
+                  </div>
+                </div>
+                {task.outcome && (
+                  <p className="text-sm text-gray-600 mt-2">{task.outcome}</p>
+                )}
+                {task.reflection && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    <span className="font-medium">反思：</span>{task.reflection}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
+      )}
 
-        {/* 每日追踪统计 */}
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <h4 className="text-md font-semibold text-gray-700 mb-4">🎯 每日追踪统计</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-4 bg-pink-50 rounded-lg">
-              <div className="text-2xl font-bold text-pink-600">{dailyLogs.length}</div>
-              <div className="text-sm text-gray-600 mt-1">追踪天数</div>
-            </div>
-            <div className="text-center p-4 bg-yellow-50 rounded-lg">
-              <div className="text-2xl font-bold text-yellow-600">
-                {dailyLogs.filter(l => l.goals && l.accomplishments).length}
-              </div>
-              <div className="text-sm text-gray-600 mt-1">完成目标</div>
-            </div>
-            <div className="text-center p-4 bg-indigo-50 rounded-lg">
-              <div className="text-2xl font-bold text-indigo-600">
-                {dailyLogs.filter(l => l.reflection).length}
-              </div>
-              <div className="text-sm text-gray-600 mt-1">反思次数</div>
-            </div>
-            <div className="text-center p-4 bg-teal-50 rounded-lg">
-              <div className="text-2xl font-bold text-teal-600">
-                {dailyLogs.length > 0
-                  ? (dailyLogs.reduce((sum, l) => sum + (l.mood_score || 0), 0) / dailyLogs.length).toFixed(1)
-                  : '0'
-                }
-              </div>
-              <div className="text-sm text-gray-600 mt-1">平均心情 (1-5)</div>
-            </div>
-          </div>
-        </div>
+      {/* 科学提示 */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-blue-800 mb-2">💡 效率洞察</h3>
+        <ul className="text-xs text-blue-700 space-y-1">
+          <li>• 高价值工作占比：{records.length > 0 ? ((records.filter(r => r.structured_data?.value_level === 'high').length / records.length) * 100).toFixed(1) : 0}%</li>
+          <li>• 任务完成率：{taskLogs.length > 0 ? ((completedTasks.length / taskLogs.length) * 100).toFixed(1) : 0}%</li>
+          <li>• 平均任务时长：{completedTasks.length > 0 ? Math.round(totalTaskTime / completedTasks.length) : 0} 分钟</li>
+        </ul>
       </div>
-
-      {/* 优化建议 */}
-      {suggestions.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">💡 优化建议</h3>
-          <div className="space-y-4">
-            {suggestions.slice(0, 5).map((suggestion) => (
-              <div
-                key={suggestion.id}
-                className={`p-4 rounded-lg border-l-4 ${
-                  suggestion.is_actioned ? 'bg-gray-50 border-gray-400' :
-                  suggestion.suggestion_data.priority === 'high' ? 'bg-red-50 border-red-500' :
-                  suggestion.suggestion_data.priority === 'medium' ? 'bg-yellow-50 border-yellow-500' :
-                  'bg-green-50 border-green-500'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-gray-800">{suggestion.suggestion_data.title}</h4>
-                  <span className={`px-2 py-1 text-xs rounded ${
-                    suggestion.suggestion_data.priority === 'high' ? 'bg-red-100 text-red-700' :
-                    suggestion.suggestion_data.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-green-100 text-green-700'
-                  }`}>
-                    {suggestion.suggestion_data.priority === 'high' ? '高优先级' :
-                     suggestion.suggestion_data.priority === 'medium' ? '中优先级' : '低优先级'}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600 mb-2"><strong>为什么：</strong>{suggestion.suggestion_data.why}</p>
-                <p className="text-sm text-gray-700"><strong>怎么做：</strong>{suggestion.suggestion_data.how}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 周总结列表 */}
-      {summaries.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 周总结报告</h3>
-          <div className="space-y-4">
-            {summaries.slice(0, 3).map((summary) => (
-              <div key={summary.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="text-sm text-gray-500 mb-2">
-                  {new Date(summary.week_start).toLocaleDateString('zh-CN')}
-                </div>
-                <div className="prose prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap text-gray-700 font-sans text-sm bg-gray-50 p-4 rounded">
-                    {summary.markdown_content}
-                  </pre>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

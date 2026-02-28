@@ -38,9 +38,10 @@ export default function TaskTracker() {
   const [loading, setLoading] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
 
-  // 任务历史
+  // 任务历史 - 只显示当天
   const [taskHistory, setTaskHistory] = useState<TaskLog[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [expanded, setExpanded] = useState(true); // 控制历史记录展开/收起
 
   // 加载当前任务
   useEffect(() => {
@@ -83,7 +84,12 @@ export default function TaskTracker() {
       });
       const data = await res.json();
       if (data.data) {
-        setTaskHistory(data.data.filter((t: TaskLog) => t.status === 'completed').slice(0, 10));
+        // 只保留当天完成的任务
+        const today = new Date().toDateString();
+        const todaysTasks = data.data.filter((t: TaskLog) =>
+          t.status === 'completed' && new Date(t.created_at).toDateString() === today
+        );
+        setTaskHistory(todaysTasks);
       }
     } catch (error) {
       console.error('Failed to load history:', error);
@@ -407,30 +413,48 @@ export default function TaskTracker() {
         </div>
       </div>
 
-      {/* 任务历史切换 */}
+      {/* 任务历史切换 - 只显示当天 */}
       <div className="bg-white rounded-lg shadow">
-        <button
-          onClick={() => setShowHistory(!showHistory)}
-          className="w-full px-4 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg"
-        >
-          {showHistory ? '📋 隐藏历史' : '📋 查看历史'} ({taskHistory.length})
-        </button>
+        <div className="flex items-center justify-between px-4 py-2">
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg px-2 py-1"
+          >
+            {showHistory ? '📋 隐藏历史' : '📋 查看历史'} ({taskHistory.length})
+          </button>
+          {showHistory && taskHistory.length > 0 && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+            >
+              {expanded ? '▲ 收起' : '▼ 展开'}
+            </button>
+          )}
+        </div>
 
         {showHistory && taskHistory.length > 0 && (
-          <div className="border-t border-gray-200 p-4 space-y-2 max-h-64 overflow-y-auto">
+          <div className={`border-t border-gray-200 transition-all ${
+            expanded ? 'max-h-48' : 'max-h-24'
+          } overflow-y-auto p-2`}>
             {taskHistory.map((task) => (
-              <div key={task.id} className="text-sm">
+              <div key={task.id} className="text-sm p-2 hover:bg-gray-50 rounded">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-gray-800">{task.task_title}</span>
                   <span className="text-xs text-gray-500">
                     {task.time_spent_minutes ? `${task.time_spent_minutes}分钟` : ''}
                   </span>
                 </div>
-                <div className="text-xs text-gray-600 mt-1">
+                <div className="text-xs text-gray-600 mt-1 truncate">
                   {task.outcome}
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {showHistory && taskHistory.length === 0 && (
+          <div className="border-t border-gray-200 p-4 text-center text-sm text-gray-500">
+            今天还没有完成的任务
           </div>
         )}
       </div>
