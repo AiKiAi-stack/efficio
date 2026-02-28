@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { supabase } from '../lib/database';
-import { anthropic } from '../lib/ai';
+import { supabase, isMemoryMode } from '../lib/database';
+import { anthropic, isAiAvailable, generateSuggestionsWithoutAI } from '../lib/ai';
 
 export const suggestionsRouter = Router();
 
@@ -80,11 +80,14 @@ suggestionsRouter.post('/generate', async (req, res) => {
       .order('week_start', { ascending: false })
       .limit(4);
 
-    // 调用 AI 生成优化建议
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1536,
-      system: `你是一个专业的效率优化顾问。请根据用户的工作记录和历史总结生成具体的优化建议。
+    let suggestionData;
+
+    if (anthropic && isAiAvailable) {
+      // 调用 AI 生成优化建议
+      const message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1536,
+        system: `你是一个专业的效率优化顾问。请根据用户的工作记录和历史总结生成具体的优化建议。
 
 请分析以下维度并生成建议：
 
@@ -112,10 +115,10 @@ suggestionsRouter.post('/generate', async (req, res) => {
     }
   ]
 }`,
-      messages: [
-        {
-          role: 'user',
-          content: `请根据以下数据生成优化建议：
+        messages: [
+          {
+            role: 'user',
+            content: `请根据以下数据生成优化建议：
 
 最近工作记录（最多 50 条）：
 ${records.map(r => `- ${new Date(r.created_at).toLocaleDateString('zh-CN')}: ${r.optimized_text || r.original_text}${r.structured_data ? ` [${JSON.stringify(r.structured_data)}]` : ''}`).join('\n')}
@@ -123,42 +126,48 @@ ${records.map(r => `- ${new Date(r.created_at).toLocaleDateString('zh-CN')}: ${r
 ${recentSummaries && recentSummaries.length > 0 ? `
 最近周总结：
 ${recentSummaries.map(s => s.markdown_content).join('\n\n')}` : ''}`
-        }
-      ]
-    });
-
-    const content = message.content[0].type === 'text' ? message.content[0].text : '';
-
-    // 解析 JSON
-    let jsonStr = content.trim();
-    if (jsonStr.startsWith('```json')) {
-      jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-
-    let suggestionData;
-    try {
-      suggestionData = JSON.parse(jsonStr);
-    } catch (e) {
-      console.error('Failed to parse suggestions JSON:', jsonStr);
-      return res.status(500).json({
-        success: false,
-        error: 'AI 生成建议格式错误'
+          }
+        ]
       });
+
+      const content = message.content[0].type === 'text' ? message.content[0].text : '';
+
+      // 解析 JSON
+      let jsonStr = content.trim();
+      if (jsonStr.startsWith('```json')) {
+        jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+
+      try {
+        suggestionData = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error('Failed to parse suggestions JSON:', jsonStr);
+        return res.status(500).json({
+          success: false,
+          error: 'AI 生成建议格式错误'
+        });
+      }
+    } else {
+      // 降级模式
+      suggestionData = generateSuggestionsWithoutAI(records);
+      console.log('使用降级模式生成优化建议');
     }
 
     // 保存建议到数据库
-    const suggestionsToInsert = (suggestionData.suggestions || []).map((s: any) => ({
-      user_id: userId,
-      suggestion_type: type || 'pattern',
-      suggestion_data: s
-    }));
+    if (!isMemoryMode && suggestionData.suggestions) {
+      const suggestionsToInsert = (suggestionData.suggestions || []).map((s: any) => ({
+        user_id: userId,
+        suggestion_type: type || 'pattern',
+        suggestion_data: s
+      }));
 
-    if (suggestionsToInsert.length > 0) {
-      await supabase
-        .from('optimization_suggestions')
-        .insert(suggestionsToInsert);
+      if (suggestionsToInsert.length > 0) {
+        await supabase
+          .from('optimization_suggestions')
+          .insert(suggestionsToInsert);
+      }
     }
 
     res.json({

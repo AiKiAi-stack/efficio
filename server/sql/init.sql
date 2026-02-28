@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Work Records 表 - 存储工作记录
+-- Work Records 表 - 存储工作记录（今日干点啥）
 CREATE TABLE IF NOT EXISTS work_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -18,9 +18,42 @@ CREATE TABLE IF NOT EXISTS work_records (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Daily Logs 表 - 存储每日 PDCA 三段式记录（新增）
+CREATE TABLE IF NOT EXISTS daily_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    log_date DATE NOT NULL,  -- 记录日期
+
+    -- Plan - 目标设定
+    goals TEXT,  -- 今日目标
+    goal_priority TEXT,  -- 目标优先级 JSON: [{goal, priority}]
+
+    -- Do - 执行追踪
+    start_time TIMESTAMPTZ,  -- 开始时间
+    end_time TIMESTAMPTZ,  -- 完成时间
+    accomplishments TEXT,  -- 具体完成了什么
+
+    -- Check/Act - 反思
+    reflection TEXT,  -- 反思内容
+    lessons_learned JSONB,  -- 学到的经验 JSON: [{lesson, category}]
+    improvement_plan TEXT,  -- 改进计划
+
+    -- 元数据
+    mood_score INTEGER CHECK (mood_score >= 1 AND mood_score <= 5),  -- 心情分数 1-5
+    energy_level TEXT,  -- 能量等级：high/medium/low
+
+    structured_data JSONB,  -- 结构化分析数据
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE(user_id, log_date)  -- 每天一条记录
+);
+
 -- 索引 - 加速查询
 CREATE INDEX IF NOT EXISTS idx_work_records_user_id ON work_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_work_records_created_at ON work_records(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_logs_user_id ON daily_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_daily_logs_date ON daily_logs(log_date DESC);
 
 -- Weekly Summaries 表 - 存储周总结报告
 CREATE TABLE IF NOT EXISTS weekly_summaries (

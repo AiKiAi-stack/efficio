@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { supabase } from '../lib/database';
-import { anthropic } from '../lib/ai';
+import { supabase, isMemoryMode } from '../lib/database';
+import { anthropic, isAiAvailable, generateWeeklySummaryWithoutAI } from '../lib/ai';
 
 export const summariesRouter = Router();
 
@@ -95,17 +95,20 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
       });
     }
 
-    // 调用 AI 生成周总结
-    const recordsContext = records.map(r => {
-      const structured = r.structured_data ? JSON.stringify(r.structured_data) : '无结构化数据';
-      const content = r.optimized_text || r.original_text;
-      return `- [${new Date(r.created_at).toLocaleDateString('zh-CN')}] ${content}\n  结构化：${structured}`;
-    }).join('\n');
+    let markdownContent = '';
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system: `你是一个专业的效率分析助手。请根据用户本周的工作记录生成周总结报告。
+    if (anthropic && isAiAvailable) {
+      // 调用 AI 生成周总结
+      const recordsContext = records.map(r => {
+        const structured = r.structured_data ? JSON.stringify(r.structured_data) : '无结构化数据';
+        const content = r.optimized_text || r.original_text;
+        return `- [${new Date(r.created_at).toLocaleDateString('zh-CN')}] ${content}\n  结构化：${structured}`;
+      }).join('\n');
+
+      const message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        system: `你是一个专业的效率分析助手。请根据用户本周的工作记录生成周总结报告。
 
 请分析以下维度并生成 Markdown 格式报告：
 
@@ -144,15 +147,20 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
 \`\`\`
 
 请直接返回 Markdown 内容，不要解释。`,
-      messages: [
-        {
-          role: 'user',
-          content: `请根据以下本周工作记录生成周总结报告：\n\n${recordsContext}`
-        }
-      ]
-    });
+        messages: [
+          {
+            role: 'user',
+            content: `请根据以下本周工作记录生成周总结报告：\n\n${recordsContext}`
+          }
+        ]
+      });
 
-    const markdownContent = message.content[0].type === 'text' ? message.content[0].text : '';
+      markdownContent = message.content[0].type === 'text' ? message.content[0].text : '';
+    } else {
+      // 降级模式
+      markdownContent = generateWeeklySummaryWithoutAI(records);
+      console.log('使用降级模式生成周总结');
+    }
 
     // 抽取结构化数据（用于后续分析）
     const summaryData = {
@@ -163,44 +171,57 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
       records_with_structured_data: records.filter(r => r.structured_data).length
     };
 
-    // 保存到数据库（如果已存在则更新）
-    const { data: existingSummary } = await supabase
-      .from('weekly_summaries')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('week_start', week_start)
-      .single();
-
+    // 保存到数据库
     let savedSummary;
 
-    if (existingSummary) {
-      const { data, error } = await supabase
-        .from('weekly_summaries')
-        .update({
-          summary_data: summaryData,
-          markdown_content: markdownContent
-        })
-        .eq('id', existingSummary.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      savedSummary = data;
+    if (isMemoryMode) {
+      // 内存模式：简化处理，直接返回
+      savedSummary = {
+        id: Math.random().toString(36).substring(2),
+        user_id: userId,
+        week_start,
+        week_end,
+        summary_data: summaryData,
+        markdown_content: markdownContent,
+        created_at: new Date().toISOString()
+      };
     } else {
-      const { data, error } = await supabase
+      const { data: existingSummary } = await supabase
         .from('weekly_summaries')
-        .insert([{
-          user_id: userId,
-          week_start,
-          week_end,
-          summary_data: summaryData,
-          markdown_content: markdownContent
-        }])
-        .select()
+        .select('id')
+        .eq('user_id', userId)
+        .eq('week_start', week_start)
         .single();
 
-      if (error) throw error;
-      savedSummary = data;
+      if (existingSummary) {
+        const { data, error } = await supabase
+          .from('weekly_summaries')
+          .update({
+            summary_data: summaryData,
+            markdown_content: markdownContent
+          })
+          .eq('id', existingSummary.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedSummary = data;
+      } else {
+        const { data, error } = await supabase
+          .from('weekly_summaries')
+          .insert([{
+            user_id: userId,
+            week_start,
+            week_end,
+            summary_data: summaryData,
+            markdown_content: markdownContent
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedSummary = data;
+      }
     }
 
     res.json({

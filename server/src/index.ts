@@ -8,6 +8,7 @@ import { analyzeRouter } from './routes/analyze';
 import { summariesRouter } from './routes/summaries';
 import { trendsRouter } from './routes/trends';
 import { suggestionsRouter } from './routes/suggestions';
+import { dailyLogsRouter } from './routes/dailyLogs';
 import { initCronJobs } from './lib/cron';
 
 dotenv.config();
@@ -45,6 +46,7 @@ app.use('/api/analyze', analyzeRouter);
 app.use('/api/summaries', summariesRouter);
 app.use('/api/trends', trendsRouter);
 app.use('/api/suggestions', suggestionsRouter);
+app.use('/api/daily-logs', dailyLogsRouter);
 
 // Error handling
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
