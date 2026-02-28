@@ -70,7 +70,8 @@ export default function Settings() {
           vllm: 'VLLM_API_KEY',
           aliyun: 'ALIYUN_API_KEY',
           volcengine: 'VOLCENGINE_API_KEY',
-          minimax: 'MINIMAX_API_KEY'
+          minimax: 'MINIMAX_API_KEY',
+          openrouter: 'OPENROUTER_API_KEY'
         };
         return envMap[providerKey] || 'API_KEY';
       };
@@ -85,7 +86,8 @@ export default function Settings() {
           vllm: 'http://localhost:8000/v1',
           aliyun: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
           volcengine: 'https://ark.cn-beijing.volces.com/api/v3',
-          minimax: 'https://api.minimax.chat/v1'
+          minimax: 'https://api.minimaxi.com/v1',
+          openrouter: 'https://openrouter.ai/api/v1'
         };
         return endpoints[providerKey];
       };
@@ -127,7 +129,8 @@ export default function Settings() {
       vllm: 'VLLM_API_KEY',
       aliyun: 'ALIYUN_API_KEY',
       volcengine: 'VOLCENGINE_API_KEY',
-      minimax: 'MINIMAX_API_KEY'
+      minimax: 'MINIMAX_API_KEY',
+      openrouter: 'OPENROUTER_API_KEY'
     };
 
     // 提示用户需要在服务器端配置环境变量

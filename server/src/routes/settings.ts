@@ -75,7 +75,8 @@ settingsRouter.post('/ai-providers/:provider/test', async (req, res) => {
       case 'nvidia':
       case 'aliyun':
       case 'volcengine':
-      case 'minimax': {
+      case 'minimax':
+      case 'openrouter': {
         // 这些都使用 OpenAI 兼容格式
         try {
           const { OpenAI } = await import('openai');
@@ -86,7 +87,8 @@ settingsRouter.post('/ai-providers/:provider/test', async (req, res) => {
              provider === 'nvidia' ? 'https://integrate.api.nvidia.com/v1' :
              provider === 'aliyun' ? 'https://dashscope.aliyuncs.com/compatible-mode/v1' :
              provider === 'volcengine' ? 'https://ark.cn-beijing.volces.com/api/v3' :
-             provider === 'minimax' ? 'https://api.minimax.chat/v1' :
+             provider === 'minimax' ? 'https://api.minimaxi.com/v1' :
+             provider === 'openrouter' ? 'https://openrouter.ai/api/v1' :
              'https://api.openai.com/v1');
 
           const client = new OpenAI({ apiKey, baseURL: endpoint });
@@ -149,7 +151,8 @@ function getProviderName(key: string): string {
     nvidia: 'NVIDIA',
     aliyun: '阿里云',
     volcengine: '火山引擎',
-    minimax: 'MiniMax'
+    minimax: 'MiniMax',
+    openrouter: 'OpenRouter'
   };
   return names[key] || key;
 }

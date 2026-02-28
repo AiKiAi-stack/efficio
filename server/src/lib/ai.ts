@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 
 // 支持多 AI Provider 配置
 interface AIProviderConfig {
-  provider: 'anthropic' | 'openai' | 'deepseek' | 'zhipu' | 'kimi' | 'nvidia' | 'vllm' | 'aliyun' | 'volcengine' | 'minimax';
+  provider: 'anthropic' | 'openai' | 'deepseek' | 'zhipu' | 'kimi' | 'nvidia' | 'vllm' | 'aliyun' | 'volcengine' | 'minimax' | 'openrouter';
   apiKey?: string;
   apiEndpoint?: string;
   model?: string;
@@ -62,8 +62,13 @@ const getProviderConfig = (): AIProviderConfig => {
     },
     minimax: {
       apiKey: process.env.MINIMAX_API_KEY,
-      apiEndpoint: 'https://api.minimax.chat/v1',
-      model: 'abab6.5-chat'
+      apiEndpoint: 'https://api.minimaxi.com/v1',
+      model: 'MiniMax2.5'
+    },
+    openrouter: {
+      apiKey: process.env.OPENROUTER_API_KEY,
+      apiEndpoint: 'https://openrouter.ai/api/v1',
+      model: 'openai/gpt-4o' // OpenRouter 支持多个模型，默认使用 GPT-4o
     }
   };
 
@@ -181,10 +186,18 @@ export function getProviderTemplates(): Record<string, { name: string; envKey: s
     minimax: {
       name: 'MiniMax',
       envKey: 'MINIMAX_API_KEY',
-      defaultEndpoint: 'https://api.minimax.chat/v1',
-      defaultModel: 'abab6.5-chat',
+      defaultEndpoint: 'https://api.minimaxi.com/v1',
+      defaultModel: 'MiniMax2.5',
       docs: 'https://platform.minimaxi.com/document/guides',
-      description: '国产 MiniMax 大模型'
+      description: '国产 MiniMax 大模型，最新 MiniMax2.5'
+    },
+    openrouter: {
+      name: 'OpenRouter',
+      envKey: 'OPENROUTER_API_KEY',
+      defaultEndpoint: 'https://openrouter.ai/api/v1',
+      defaultModel: 'openai/gpt-4o',
+      docs: 'https://openrouter.ai/docs',
+      description: '聚合多个 AI 提供商的 API 服务'
     }
   };
 }
