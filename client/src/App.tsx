@@ -29,6 +29,12 @@ function App() {
     icon: string;
   } | null>(null);
 
+  // 城市选择状态
+  const [showCitySelector, setShowCitySelector] = useState(false);
+  const [citySearch, setCitySearch] = useState('');
+  const [cityResults, setCityResults] = useState<Array<{name: string; lat: number; lon: number}>>([]);
+  const [searchingCities, setSearchingCities] = useState(false);
+
   // 检查本地存储的 session
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
@@ -40,7 +46,7 @@ function App() {
   }, []);
 
   // 获取天气
-  const fetchWeather = async (latitude?: number, longitude?: number) => {
+  const fetchWeather = async (latitude?: number, longitude?: number, locationName?: string) => {
     try {
       let lat = latitude;
       let lon = longitude;
@@ -75,31 +81,44 @@ function App() {
       const weatherData = await weatherRes.json();
 
       if (weatherData.current_weather) {
-        // 使用反向地理编码获取地名（OpenStreetMap Nominatim API）
-        let locationName = '当前位置';
-        try {
-          const geoRes = await fetch(
-            `https://api.open-meteo.com/v1/geocode?latitude=${lat}&longitude=${lon}&count=1&language=zh&format=json`
-          );
-          const geoData = await geoRes.json();
-          if (geoData?.results?.[0]) {
-            const result = geoData.results[0];
-            // 优先使用行政区划名称
-            locationName = result.admin1 || result.name || `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`;
+        // 如果未提供位置名称，使用反向地理编码获取地名
+        let displayName = locationName;
+        if (!displayName) {
+          try {
+            // 使用 Nominatim 反向地理编码获取城市名称
+            const geoRes = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=zh-CN,en`
+            );
+            const geoData = await geoRes.json();
+
+            if (geoData?.address) {
+              const addr = geoData.address;
+              displayName = addr.city ||
+                            addr.town ||
+                            addr.village ||
+                            addr.county ||
+                            addr.state ||
+                            addr.region ||
+                            `${lat.toFixed(1)}°N, ${lon.toFixed(1)}°E`;
+            }
+          } catch (geoError) {
+            console.error('Geocoding error:', geoError);
+            displayName = `${lat.toFixed(1)}°N, ${lon.toFixed(1)}°E`;
           }
-        } catch (geoError) {
-          console.error('Geocoding error:', geoError);
-          // 降级使用坐标
-          locationName = `${lat.toFixed(1)}°, ${lon.toFixed(1)}°`;
         }
 
         // 获取天气图标
         const icon = getWeatherIcon(weatherData.current_weather.weathercode);
 
+        // 修复湿度显示 - 确保正确获取湿度数据
+        const humidity = weatherData.relativehumidity_2m?.value;
+        const currentWeatherHumidity = weatherData.current_weather?.humidity;
+
         setWeather({
-          location: locationName,
+          location: displayName || '当前位置',
           temperature: Math.round(weatherData.current_weather.temperature),
-          humidity: weatherData.relativehumidity_2m?.value || 50,
+          humidity: humidity !== undefined ? Math.round(humidity) :
+                    currentWeatherHumidity !== undefined ? Math.round(currentWeatherHumidity) : 50,
           condition: getWeatherCondition(weatherData.current_weather.weathercode),
           icon
         });
@@ -109,11 +128,38 @@ function App() {
     }
   };
 
-  // 手动刷新位置
-  const refreshLocation = () => {
-    // 清除缓存的位置
-    localStorage.removeItem('userLocation');
-    fetchWeather();
+  // 搜索城市
+  const searchCities = async (query: string) => {
+    if (!query.trim()) {
+      setCityResults([]);
+      return;
+    }
+
+    setSearchingCities(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&accept-language=zh-CN,en&limit=5`
+      );
+      const data = await res.json();
+      setCityResults(data.map((item: any) => ({
+        name: item.display_name.split(',')[0],
+        lat: parseFloat(item.lat),
+        lon: parseFloat(item.lon)
+      })));
+    } catch (error) {
+      console.error('Failed to search cities:', error);
+      setCityResults([]);
+    } finally {
+      setSearchingCities(false);
+    }
+  };
+
+  // 选择城市
+  const handleSelectCity = (city: {name: string; lat: number; lon: number}) => {
+    setCitySearch('');
+    setCityResults([]);
+    setShowCitySelector(false);
+    fetchWeather(city.lat, city.lon, city.name);
   };
 
   const getWeatherIcon = (code: number): string => {
@@ -273,23 +319,70 @@ function App() {
 
               {/* 天气组件 */}
               {weather && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-                  <span className="text-lg">{weather.icon}</span>
-                  <div className="text-xs">
-                    <div className="font-medium text-gray-700">
-                      {weather.temperature}°C {weather.condition}
+                <div className="relative">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
+                    <span className="text-lg">{weather.icon}</span>
+                    <div className="text-xs">
+                      <div className="font-medium text-gray-700">
+                        {weather.temperature}°C {weather.condition}
+                      </div>
+                      <div className="text-gray-500">
+                        {weather.location} | 湿度 {weather.humidity}%
+                      </div>
                     </div>
-                    <div className="text-gray-500">
-                      {weather.location} | 湿度 {weather.humidity}%
-                    </div>
+                    <button
+                      onClick={() => setShowCitySelector(!showCitySelector)}
+                      className="text-xs text-blue-600 hover:text-blue-800 ml-1"
+                      title="选择城市"
+                    >
+                      🏙️
+                    </button>
                   </div>
-                  <button
-                    onClick={refreshLocation}
-                    className="text-xs text-blue-600 hover:text-blue-800 ml-1"
-                    title="刷新位置"
-                  >
-                    🔄
-                  </button>
+
+                  {/* 城市选择器 */}
+                  {showCitySelector && (
+                    <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 p-3 z-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-700">选择城市</span>
+                        <button
+                          onClick={() => setShowCitySelector(false)}
+                          className="text-xs text-gray-400 hover:text-gray-600"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={citySearch}
+                        onChange={(e) => {
+                          setCitySearch(e.target.value);
+                          searchCities(e.target.value);
+                        }}
+                        placeholder="搜索城市..."
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                      />
+                      {searchingCities && (
+                        <div className="text-xs text-gray-500 py-2">搜索中...</div>
+                      )}
+                      {cityResults.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {cityResults.map((city, index) => (
+                            <button
+                              key={index}
+                              onClick={() => handleSelectCity(city)}
+                              className="w-full text-left text-sm px-2 py-1 hover:bg-blue-50 rounded"
+                            >
+                              {city.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {citySearch && cityResults.length === 0 && !searchingCities && (
+                        <div className="text-xs text-gray-500 py-2">未找到城市</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

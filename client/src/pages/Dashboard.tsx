@@ -9,6 +9,7 @@ interface WorkRecord {
     time_spent: string;
     value_level: string;
     is_deep_work: boolean;
+    interruptions?: number;
   } | null;
 }
 
@@ -22,6 +23,40 @@ interface TaskLog {
   time_spent_minutes: number | null;
   priority: string | null;
   created_at: string;
+}
+
+interface TimeDistribution {
+  hourlyDistribution: { hour: number; count: number }[];
+  peakHours: number[];
+  deepWorkWindows: { start: number; end: number; score: number }[];
+  workDayPattern: 'morning' | 'afternoon' | 'evening' | 'balanced';
+}
+
+interface WorkInsights {
+  productivityScore: number;
+  deepWorkRatio: number;
+  focusQuality: 'excellent' | 'good' | 'needs_improvement' | 'poor';
+  topCategories: { category: string; percentage: number }[];
+  valueContribution: { high: number; medium: number; low: number };
+  identifiedPatterns: string[];
+  improvementAreas: string[];
+}
+
+interface Recommendation {
+  title: string;
+  category: string;
+  priority: 'high' | 'medium' | 'low';
+  action: string;
+  expected_impact: string;
+}
+
+interface SummaryMetrics {
+  totalRecords: number;
+  totalTasks: number;
+  completedTasks: number;
+  totalDeepWorkHours: number;
+  averageInterruptionScore: number;
+  highValueWorkPercentage: number;
 }
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6B7280'];
@@ -45,20 +80,24 @@ const valueLabels: Record<string, string> = {
 export default function Dashboard() {
   const [records, setRecords] = useState<WorkRecord[]>([]);
   const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // AI 总结状态
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
-  const [summaryRange, setSummaryRange] = useState<{ start: string; end: string } | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [showAiSummaryPanel, setShowAiSummaryPanel] = useState(true);
+
+  // 增强的分析数据状态
+  const [timeDistribution, setTimeDistribution] = useState<TimeDistribution | null>(null);
+  const [insights, setInsights] = useState<WorkInsights | null>(null);
+  const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null);
+  const [metrics, setMetrics] = useState<SummaryMetrics | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    setLoading(true);
     const token = localStorage.getItem('sessionToken');
     if (!token) return;
 
@@ -79,8 +118,6 @@ export default function Dashboard() {
     if (taskLogsData.data) {
       setTaskLogs(taskLogsData.data);
     }
-
-    setLoading(false);
   };
 
   // 生成 AI 总结
@@ -97,8 +134,8 @@ export default function Dashboard() {
 
     try {
       const body = range
-        ? { start_date: range.start, end_date: range.end }
-        : { date: new Date().toISOString().split('T')[0] };
+        ? { start_date: range.start, end_date: range.end, enhanced: true }
+        : { date: new Date().toISOString().split('T')[0], enhanced: true };
 
       const res = await fetch('/api/summaries/range', {
         method: 'POST',
@@ -117,7 +154,12 @@ export default function Dashboard() {
       const data = await res.json();
       if (data.data?.markdown_content) {
         setAiSummary(data.data.markdown_content);
-        setSummaryRange(range || { start: body.date, end: body.date });
+        // 设置增强的分析数据
+        setTimeDistribution(data.data.time_distribution || null);
+        setInsights(data.data.insights || null);
+        setRecommendations(data.data.recommendations || null);
+        setMetrics(data.data.metrics || null);
+        setShowAiSummaryPanel(true);
       } else {
         setSummaryError('生成失败：无返回内容');
       }
@@ -188,20 +230,187 @@ export default function Dashboard() {
       )}
 
       {/* AI 总结显示 */}
-      {aiSummary && (
-        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg shadow p-6 border-l-4 border-purple-500">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-purple-800">📊 AI 总结报告</h3>
-            <button
-              onClick={() => setAiSummary(null)}
-              className="text-xs text-purple-600 hover:text-purple-800"
-            >
-              收起
-            </button>
+      {aiSummary && showAiSummaryPanel && (
+        <div className="space-y-6">
+          {/* 基础指标卡片 */}
+          {metrics && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="bg-white rounded-lg shadow p-4 text-center">
+                <div className="text-2xl font-bold text-blue-600">{metrics.totalRecords}</div>
+                <div className="text-xs text-gray-500 mt-1">工作记录</div>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4 text-center">
+                <div className="text-2xl font-bold text-green-600">{metrics.completedTasks}/{metrics.totalTasks}</div>
+                <div className="text-xs text-gray-500 mt-1">完成任务</div>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4 text-center">
+                <div className="text-2xl font-bold text-purple-600">{metrics.totalDeepWorkHours.toFixed(1)}h</div>
+                <div className="text-xs text-gray-500 mt-1">深度工作</div>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4 text-center">
+                <div className="text-2xl font-bold text-orange-600">{metrics.highValueWorkPercentage}%</div>
+                <div className="text-xs text-gray-500 mt-1">高价值占比</div>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4 text-center">
+                <div className="text-2xl font-bold text-red-600">{metrics.averageInterruptionScore}</div>
+                <div className="text-xs text-gray-500 mt-1">平均打断</div>
+              </div>
+              {insights && (
+                <div className="bg-white rounded-lg shadow p-4 text-center">
+                  <div className={`text-2xl font-bold ${
+                    insights.productivityScore >= 80 ? 'text-green-600' :
+                    insights.productivityScore >= 60 ? 'text-blue-600' :
+                    insights.productivityScore >= 40 ? 'text-yellow-600' : 'text-red-600'
+                  }`}>{insights.productivityScore}</div>
+                  <div className="text-xs text-gray-500 mt-1">生产力评分</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 时间分布图表 */}
+          {timeDistribution && timeDistribution.hourlyDistribution && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-md font-semibold text-gray-800 mb-4">⏱️ 时间分布分析</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-sm text-gray-600 mb-2">工作时段分布</h4>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={timeDistribution.hourlyDistribution.filter(h => h.count > 0)}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} />
+                      <YAxis />
+                      <Tooltip labelFormatter={(h) => `${h}:00`} />
+                      <Bar dataKey="count" fill="#3B82F6" name="记录数" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-3">
+                  <div className="p-3 bg-gray-50 rounded">
+                    <span className="text-sm font-medium text-gray-700">工作模式：</span>
+                    <span className="ml-2 text-sm text-gray-600">
+                      {timeDistribution.workDayPattern === 'morning' ? '晨间高效型' :
+                       timeDistribution.workDayPattern === 'afternoon' ? '下午高效型' :
+                       timeDistribution.workDayPattern === 'evening' ? '夜间工作型' : '均衡分布型'}
+                    </span>
+                  </div>
+                  {timeDistribution.peakHours.length > 0 && (
+                    <div className="p-3 bg-blue-50 rounded">
+                      <span className="text-sm font-medium text-blue-700">高峰时段：</span>
+                      <span className="ml-2 text-sm text-blue-600">
+                        {timeDistribution.peakHours.map(h => `${h}:00`).join(', ')}
+                      </span>
+                    </div>
+                  )}
+                  {timeDistribution.deepWorkWindows.length > 0 && (
+                    <div className="p-3 bg-purple-50 rounded">
+                      <span className="text-sm font-medium text-purple-700">深度工作窗口：</span>
+                      <div className="mt-1 text-sm text-purple-600">
+                        {timeDistribution.deepWorkWindows.map((w, i) => (
+                          <div key={i}>{w.start}:00 - {w.end}:00 (评分: {w.score})</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 洞察和建议 */}
+          {insights && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 工作洞察 */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-md font-semibold text-gray-800 mb-4">🎯 工作洞察</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <span className="text-sm text-gray-600">专注质量</span>
+                    <span className={`px-2 py-1 text-xs rounded ${
+                      insights.focusQuality === 'excellent' ? 'bg-green-100 text-green-700' :
+                      insights.focusQuality === 'good' ? 'bg-blue-100 text-blue-700' :
+                      insights.focusQuality === 'needs_improvement' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {insights.focusQuality === 'excellent' ? '优秀' :
+                       insights.focusQuality === 'good' ? '良好' :
+                       insights.focusQuality === 'needs_improvement' ? '待改进' : '需要关注'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <span className="text-sm text-gray-600">深度工作比例</span>
+                    <span className="text-sm font-medium text-purple-600">{(insights.deepWorkRatio * 100).toFixed(1)}%</span>
+                  </div>
+                  {insights.identifiedPatterns.length > 0 && (
+                    <div className="p-3 bg-blue-50 rounded">
+                      <h4 className="text-sm font-medium text-blue-700 mb-2">识别的模式</h4>
+                      <ul className="text-xs text-blue-600 space-y-1">
+                        {insights.identifiedPatterns.map((p, i) => (
+                          <li key={i}>• {p}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 个性化建议 */}
+              {recommendations && recommendations.length > 0 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h3 className="text-md font-semibold text-gray-800 mb-4">💡 个性化建议</h3>
+                  <div className="space-y-3">
+                    {recommendations.slice(0, 3).map((rec, i) => (
+                      <div key={i} className="p-3 border border-gray-200 rounded hover:bg-gray-50">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-800">{rec.title}</span>
+                          <span className={`px-2 py-0.5 text-xs rounded ${
+                            rec.priority === 'high' ? 'bg-red-100 text-red-700' :
+                            rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {rec.priority === 'high' ? '高' : rec.priority === 'medium' ? '中' : '低'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-600 mb-1">{rec.action}</p>
+                        <p className="text-xs text-gray-400">预期效果: {rec.expected_impact}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 完整的 Markdown 报告 */}
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg shadow p-6 border-l-4 border-purple-500">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-purple-800">📊 AI 详细报告</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAiSummaryPanel(!showAiSummaryPanel)}
+                  className="text-xs text-purple-600 hover:text-purple-800"
+                >
+                  {showAiSummaryPanel ? '收起' : '展开'}
+                </button>
+                <button
+                  onClick={() => {
+                    setAiSummary(null);
+                    setTimeDistribution(null);
+                    setInsights(null);
+                    setRecommendations(null);
+                    setMetrics(null);
+                    setShowAiSummaryPanel(true);
+                  }}
+                  className="text-xs text-purple-600 hover:text-purple-800"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+            <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans bg-white p-4 rounded max-h-96 overflow-y-auto">
+              {aiSummary}
+            </pre>
           </div>
-          <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans bg-white p-4 rounded">
-            {aiSummary}
-          </pre>
         </div>
       )}
 

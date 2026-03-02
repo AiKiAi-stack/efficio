@@ -1,29 +1,44 @@
 import { Router } from 'express';
-import { getProviderTemplates, getCurrentProvider } from '../lib/ai';
+import { getProviderTemplate, getAllProviderTemplates } from '../lib/ai-providers';
+import { updateProviderConfig, configManager } from '../lib/config-manager';
 
 export const settingsRouter = Router();
 
 // 获取 AI Provider 配置
 settingsRouter.get('/ai-providers', (req, res) => {
   try {
-    const templates = getProviderTemplates();
-    const currentProvider = getCurrentProvider();
+    const templates = getAllProviderTemplates();
+
+    // 读取配置文件获取当前配置
+    const config = configManager.read();
+    const aiProvider = config.AI_PROVIDER || process.env.AI_PROVIDER || 'anthropic';
 
     // 返回所有 provider 的配置信息和当前配置状态
-    const providers = Object.entries(templates).map(([key, value]) => ({
-      key,
-      name: value.name,
-      docs: value.docs,
-      isConfigured: process.env[value.envKey] !== undefined,
-      isCurrent: currentProvider?.provider === key,
-      currentModel: currentProvider?.provider === key ? currentProvider.model : undefined
-    }));
+    const providers = templates.map((value) => {
+      const upperKey = value.key.toUpperCase();
+      const apiKey = config[`${upperKey}_API_KEY`] || process.env[`${upperKey}_API_KEY`];
+      const endpoint = config[`${upperKey}_ENDPOINT`] || value.defaultEndpoint;
+      const model = config[`${upperKey}_MODEL`] || value.defaultModel;
+      const maxToken = config[`${upperKey}_MAX_TOKENS`] || value.defaultMaxToken.toString();
+
+      return {
+        key: value.key,
+        name: value.name,
+        docs: value.docs,
+        description: value.description,
+        isConfigured: !!apiKey && apiKey.trim() !== '',
+        isCurrent: aiProvider === value.key,
+        currentModel: model,
+        currentEndpoint: endpoint,
+        currentMaxToken: parseInt(maxToken, 10)
+      };
+    });
 
     res.json({
       success: true,
       data: {
         providers,
-        currentProvider: currentProvider?.provider || null
+        currentProvider: aiProvider
       }
     });
   } catch (error) {
@@ -35,18 +50,176 @@ settingsRouter.get('/ai-providers', (req, res) => {
   }
 });
 
-// 测试 AI Provider 连接
-settingsRouter.post('/ai-providers/:provider/test', async (req, res) => {
+// 获取单个 Provider 模板详情
+settingsRouter.get('/ai-providers/:provider', (req, res) => {
   try {
     const { provider } = req.params;
-    const { apiKey, apiEndpoint } = req.body;
+    const template = getProviderTemplate(provider);
 
-    if (!apiKey && provider !== 'vllm') {
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        error: 'Provider 不存在'
+      });
+    }
+
+    // 读取当前配置
+    const config = configManager.read();
+    const upperProvider = provider.toUpperCase();
+
+    res.json({
+      success: true,
+      data: {
+        ...template,
+        apiKey: config[`${upperProvider}_API_KEY`] || '',
+        apiEndpoint: config[`${upperProvider}_ENDPOINT`] || template.defaultEndpoint,
+        model: config[`${upperProvider}_MODEL`] || template.defaultModel,
+        maxToken: parseInt(config[`${upperProvider}_MAX_TOKENS`] || template.defaultMaxToken.toString(), 10)
+      }
+    });
+  } catch (error) {
+    console.error('Get provider error:', error);
+    res.status(500).json({
+      success: false,
+      error: '获取 Provider 详情失败'
+    });
+  }
+});
+
+// 保存 Provider 配置
+settingsRouter.post('/ai-providers/:provider/config', async (req, res) => {
+  try {
+    const { provider } = req.params;
+    const { apiKey, apiEndpoint, model, maxToken } = req.body;
+
+    // 验证 provider 是否存在
+    const template = getProviderTemplate(provider);
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        error: 'Provider 不存在'
+      });
+    }
+
+    // 验证必填字段
+    if (!apiKey || apiKey.trim() === '') {
       return res.status(400).json({
         success: false,
         error: 'API Key 不能为空'
       });
     }
+
+    // 更新配置
+    const result = await updateProviderConfig(provider, {
+      apiKey: apiKey.trim(),
+      apiEndpoint: apiEndpoint?.trim() || undefined,
+      model: model?.trim() || undefined,
+      maxToken: maxToken ? parseInt(maxToken, 10) : undefined
+    });
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error || '保存配置失败'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: '配置已保存。如需启用，请重启服务器或设置为当前 Provider。'
+    });
+  } catch (error) {
+    console.error('Save provider config error:', error);
+    res.status(500).json({
+      success: false,
+      error: '保存配置失败'
+    });
+  }
+});
+
+// 设置当前使用的 Provider
+settingsRouter.post('/ai-providers/:provider/activate', async (req, res) => {
+  try {
+    const { provider } = req.params;
+
+    // 验证 provider 是否存在
+    const template = getProviderTemplate(provider);
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        error: 'Provider 不存在'
+      });
+    }
+
+    // 检查是否已配置
+    const config = configManager.read();
+    const upperProvider = provider.toUpperCase();
+    const apiKey = config[`${upperProvider}_API_KEY`];
+
+    if (!apiKey || apiKey.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: '该 Provider 尚未配置 API Key'
+      });
+    }
+
+    // 设置为当前 Provider
+    configManager.set('AI_PROVIDER', provider);
+    process.env.AI_PROVIDER = provider;
+
+    res.json({
+      success: true,
+      message: `已将 ${template.name} 设为当前 Provider`
+    });
+  } catch (error) {
+    console.error('Activate provider error:', error);
+    res.status(500).json({
+      success: false,
+      error: '激活 Provider 失败'
+    });
+  }
+});
+
+// 测试 AI Provider 连接
+settingsRouter.post('/ai-providers/:provider/test', async (req, res) => {
+  try {
+    const { provider } = req.params;
+    let { apiKey, apiEndpoint } = req.body;
+
+    // 如果没有提供 apiKey 或 apiKey 为空/空白，从保存的配置中读取
+    if (!apiKey || apiKey.trim() === '' || apiKey === '***configured***') {
+      const config = configManager.read();
+      const upperProvider = provider.toUpperCase();
+      const savedApiKey = config[`${upperProvider}_API_KEY`] || process.env[`${upperProvider}_API_KEY`];
+      if (savedApiKey && savedApiKey.trim() !== '') {
+        apiKey = savedApiKey.trim();
+      }
+    } else {
+      // 使用前端传递的 apiKey，去除首尾空格
+      apiKey = apiKey.trim();
+    }
+
+    if (!apiKey && provider !== 'vllm') {
+      return res.status(400).json({
+        success: false,
+        error: 'API Key 未配置，请先保存配置'
+      });
+    }
+
+    // 如果没有提供 endpoint 或 endpoint 为空，从保存的配置或默认值中获取
+    if (!apiEndpoint || apiEndpoint.trim() === '') {
+      const config = configManager.read();
+      const upperProvider = provider.toUpperCase();
+      const savedEndpoint = config[`${upperProvider}_ENDPOINT`] || process.env[`${upperProvider}_ENDPOINT`];
+      if (savedEndpoint && savedEndpoint.trim() !== '') {
+        apiEndpoint = savedEndpoint.trim();
+      }
+    } else {
+      apiEndpoint = apiEndpoint.trim();
+    }
+
+    // 清除配置缓存，确保下次读取最新数据
+    configManager.clearCache();
 
     let testResult: { success: boolean; message: string };
 
@@ -160,19 +333,19 @@ function getProviderName(key: string): string {
 // 获取环境变量配置（仅用于前端设置页面）
 settingsRouter.get('/env-keys', (req, res) => {
   try {
-    const templates = getProviderTemplates();
+    const templates = getAllProviderTemplates();
     const keys: Record<string, string | undefined> = {};
 
     // 返回已配置的环境变量名称（不返回实际值）
-    Object.entries(templates).forEach(([key, value]) => {
-      keys[value.envKey] = process.env[value.envKey] ? '***configured***' : undefined;
+    templates.forEach((value) => {
+      keys[value.envVarKey] = process.env[value.envVarKey] ? '***configured***' : undefined;
     });
 
     res.json({
       success: true,
       data: {
         keys,
-        envKeys: Object.keys(templates).map(k => templates[k].envKey)
+        envKeys: templates.map(t => t.envVarKey)
       }
     });
   } catch (error) {

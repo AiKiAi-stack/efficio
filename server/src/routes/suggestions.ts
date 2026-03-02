@@ -188,10 +188,12 @@ suggestionsRouter.patch('/:id/action', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { error } = await supabase
+    const result = await supabase
       .from('optimization_suggestions')
       .update({ is_actioned: true })
-      .eq('id', id);
+      .eq('id', id) as any;
+
+    const error = result.error;
 
     if (error) throw error;
 

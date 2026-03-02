@@ -18,7 +18,7 @@
     "noImplicitReturns": false,
     "noFallthroughCasesInSwitch": true,
     "moduleResolution": "node",
-    "types": ["node"]
+    "types": ["node", "jest", "supertest"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

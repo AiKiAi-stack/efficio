@@ -3,34 +3,45 @@ import { useState, useEffect } from 'react';
 interface Provider {
   key: string;
   name: string;
+  description: string;
   docs: string;
   isConfigured: boolean;
   isCurrent: boolean;
   currentModel?: string;
+  currentEndpoint?: string;
+  currentMaxToken?: number;
 }
 
 interface ProviderConfig {
   apiKey: string;
   apiEndpoint: string;
   model: string;
+  maxToken: number;
+}
+
+interface ProviderTemplate {
+  defaultEndpoint: string;
+  defaultModel: string;
+  defaultMaxToken: number;
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export default function Settings() {
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [currentProvider, setCurrentProvider] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-
-  // 编辑状态
-  const [editingProvider, setEditingProvider] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
+  const [providerTemplate, setProviderTemplate] = useState<ProviderTemplate | null>(null);
   const [config, setConfig] = useState<ProviderConfig>({
     apiKey: '',
     apiEndpoint: '',
-    model: ''
+    model: '',
+    maxToken: 4096
   });
+  const [saving, setSaving] = useState(false);
+  const [activatingProvider, setActivatingProvider] = useState<string | null>(null);
 
   useEffect(() => {
     loadProviders();
@@ -42,7 +53,9 @@ export default function Settings() {
       const data = await res.json();
       if (data.data) {
         setProviders(data.data.providers);
-        setCurrentProvider(data.data.currentProvider);
+        const current = data.data.providers.find((p: Provider) => p.isCurrent);
+        const first = data.data.providers[0];
+        setSelectedProvider(current?.key || first?.key);
       }
     } catch (error) {
       console.error('Failed to load providers:', error);
@@ -51,46 +64,45 @@ export default function Settings() {
     }
   };
 
-  const handleTestConnection = async (providerKey: string) => {
+  const loadSelectedProviderDetails = async (providerKey: string) => {
+    try {
+      const res = await fetch(`${API_URL}/settings/ai-providers/${providerKey}`);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setProviderTemplate(data.data);
+        setConfig({
+          apiKey: data.data.apiKey || '',
+          apiEndpoint: data.data.apiEndpoint || data.data.defaultEndpoint,
+          model: data.data.model || data.data.defaultModel,
+          maxToken: data.data.maxToken || data.data.defaultMaxToken || 4096
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load provider details:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedProvider) {
+      loadSelectedProviderDetails(selectedProvider);
+    }
+  }, [selectedProvider]);
+
+  const handleTestConnection = async (providerKey: string, useFormConfig = false) => {
+    const provider = providers.find(p => p.key === providerKey);
     setTestingProvider(providerKey);
-    setTestResult(null);
 
     try {
-      const provider = providers.find(p => p.key === providerKey);
+      // 决定使用哪个 endpoint
+      const testEndpoint = useFormConfig && config.apiEndpoint?.trim()
+        ? config.apiEndpoint.trim()
+        : (provider?.currentEndpoint || '');
 
-      // 获取 API Key 的环境变量名
-      const getEnvKey = () => {
-        const envMap: Record<string, string> = {
-          anthropic: 'ANTHROPIC_API_KEY',
-          openai: 'OPENAI_API_KEY',
-          deepseek: 'DEEPSEEK_API_KEY',
-          zhipu: 'ZHIPU_API_KEY',
-          kimi: 'KIMI_API_KEY',
-          nvidia: 'NVIDIA_API_KEY',
-          vllm: 'VLLM_API_KEY',
-          aliyun: 'ALIYUN_API_KEY',
-          volcengine: 'VOLCENGINE_API_KEY',
-          minimax: 'MINIMAX_API_KEY',
-          openrouter: 'OPENROUTER_API_KEY'
-        };
-        return envMap[providerKey] || 'API_KEY';
-      };
-
-      // 获取 Endpoint
-      const getEndpoint = () => {
-        const endpoints: Record<string, string> = {
-          deepseek: 'https://api.deepseek.com/v1',
-          zhipu: 'https://open.bigmodel.cn/api/paas/v4',
-          kimi: 'https://api.moonshot.cn/v1',
-          nvidia: 'https://integrate.api.nvidia.com/v1',
-          vllm: 'http://localhost:8000/v1',
-          aliyun: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          volcengine: 'https://ark.cn-beijing.volces.com/api/v3',
-          minimax: 'https://api.minimaxi.com/v1',
-          openrouter: 'https://openrouter.ai/api/v1'
-        };
-        return endpoints[providerKey];
-      };
+      // 决定是否发送 apiKey
+      // 如果使用表单配置且有输入 apiKey，则发送；否则让后端从保存的配置读取
+      const testApiKey = useFormConfig && config.apiKey?.trim()
+        ? config.apiKey.trim()
+        : undefined;
 
       const res = await fetch(`${API_URL}/settings/ai-providers/${providerKey}/test`, {
         method: 'POST',
@@ -98,54 +110,94 @@ export default function Settings() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          apiKey: process.env[getEnvKey()] || '',
-          apiEndpoint: getEndpoint()
+          apiKey: testApiKey,
+          apiEndpoint: testEndpoint || undefined
         })
       });
 
       const data = await res.json();
-      setTestResult({
-        success: data.success,
-        message: data.message
-      });
+      setTestResults(prev => ({
+        ...prev,
+        [providerKey]: {
+          success: data.success,
+          message: data.message
+        }
+      }));
     } catch (error: any) {
-      setTestResult({
-        success: false,
-        message: `测试失败：${error.message}`
-      });
+      setTestResults(prev => ({
+        ...prev,
+        [providerKey]: {
+          success: false,
+          message: '测试失败: ' + error.message
+        }
+      }));
     } finally {
       setTestingProvider(null);
     }
   };
 
-  const handleSaveConfig = () => {
-    const envMap: Record<string, string> = {
-      anthropic: 'ANTHROPIC_API_KEY',
-      openai: 'OPENAI_API_KEY',
-      deepseek: 'DEEPSEEK_API_KEY',
-      zhipu: 'ZHIPU_API_KEY',
-      kimi: 'KIMI_API_KEY',
-      nvidia: 'NVIDIA_API_KEY',
-      vllm: 'VLLM_API_KEY',
-      aliyun: 'ALIYUN_API_KEY',
-      volcengine: 'VOLCENGINE_API_KEY',
-      minimax: 'MINIMAX_API_KEY',
-      openrouter: 'OPENROUTER_API_KEY'
-    };
+  const handleSaveConfig = async () => {
+    if (!selectedProvider) return;
 
-    // 提示用户需要在服务器端配置环境变量
-    alert(`配置保存提示：
+    if (!config.apiKey.trim()) {
+      alert('请输入 API Key');
+      return;
+    }
 
-由于安全原因，API Key 需要在服务器端配置。
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/settings/ai-providers/${selectedProvider}/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(config)
+      });
 
-请编辑服务器端的 .env 文件，添加以下配置：
+      const data = await res.json();
 
-${envMap[editingProvider || 'anthropic']}=your_api_key_here
+      if (data.success) {
+        alert('配置已保存');
+        loadProviders();
+      } else {
+        alert('错误: ' + data.error);
+      }
+    } catch (error: any) {
+      alert('保存失败: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
-然后重启服务器使配置生效。
+  const handleActivateProvider = async (providerKey: string) => {
+    setActivatingProvider(providerKey);
+    try {
+      const res = await fetch(`${API_URL}/settings/ai-providers/${providerKey}/activate`, {
+        method: 'POST'
+      });
 
-如需配置其他参数（如 Endpoint、Model），请参考 .env.example 文件。`);
-    setEditingProvider(null);
+      const data = await res.json();
+
+      if (data.success) {
+        alert(data.message);
+        loadProviders();
+      } else {
+        alert('错误: ' + data.error);
+      }
+    } catch (error: any) {
+      alert('激活失败: ' + error.message);
+    } finally {
+      setActivatingProvider(null);
+    }
+  };
+
+  const selected = providers.find(p => p.key === selectedProvider);
+
+  const getBorderClass = (provider: Provider) => {
+    if (selectedProvider === provider.key) return 'border-blue-500 bg-blue-50';
+    if (provider.isCurrent) return 'border-green-500 bg-green-50';
+    if (provider.isConfigured) return 'border-gray-200 hover:border-gray-300';
+    return 'border-gray-100 hover:border-gray-200';
   };
 
   if (loading) {
@@ -159,165 +211,180 @@ ${envMap[editingProvider || 'anthropic']}=your_api_key_here
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">⚙️ AI Provider 设置</h2>
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">AI Provider 设置</h2>
         <p className="text-sm text-gray-600 mb-6">
-          配置 AI Provider 以启用 AI 总结、AI 优化等功能。当前仅支持配置一个 Provider。
+          配置 AI Provider 以启用 AI 总结、AI 优化等功能。
         </p>
 
-        {/* Provider 列表 */}
-        <div className="space-y-4">
-          {providers.map((provider) => (
-            <div
-              key={provider.key}
-              className={`border rounded-lg p-4 transition ${
-                provider.isCurrent ? 'border-green-500 bg-green-50' :
-                provider.isConfigured ? 'border-blue-200 bg-blue-50' :
-                'border-gray-200'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-medium text-gray-800">{provider.name}</h3>
-                  {provider.isCurrent && (
-                    <span className="px-2 py-0.5 text-xs bg-green-600 text-white rounded">
-                      当前使用
-                    </span>
-                  )}
-                  {provider.isConfigured && !provider.isCurrent && (
-                    <span className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded">
-                      已配置
-                    </span>
+        <div className="flex gap-6">
+          {/* Left: Provider List */}
+          <div className="w-1/3 border-r pr-4">
+            <div className="space-y-2">
+              {providers.map((provider) => (
+                <div
+                  key={provider.key}
+                  onClick={() => setSelectedProvider(provider.key)}
+                  className={'p-3 rounded-lg cursor-pointer transition border-2 ' + getBorderClass(provider)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-800">{provider.name}</span>
+                      {provider.isCurrent && (
+                        <span className="px-1.5 py-0.5 text-xs bg-green-600 text-white rounded">当前</span>
+                      )}
+                    </div>
+                    {provider.isConfigured && testResults[provider.key] && (
+                      <span
+                        className={testResults[provider.key].success ? 'text-green-600' : 'text-red-600'}
+                        title={testResults[provider.key].message}
+                      >
+                        {testResults[provider.key].success ? '✓' : '✗'}
+                      </span>
+                    )}
+                  </div>
+                  {provider.isConfigured && provider.currentModel && (
+                    <p className="text-xs text-gray-500 mt-1">{provider.currentModel}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
-                  {!provider.isConfigured && (
-                    <button
-                      onClick={() => setEditingProvider(provider.key)}
-                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                    >
-                      配置
-                    </button>
-                  )}
+              ))}
+            </div>
+
+            <div className="mt-6 p-3 bg-blue-50 rounded-lg">
+              <p className="text-xs text-blue-700">点击左侧 Provider 详情进行配置</p>
+            </div>
+          </div>
+
+          {/* Right: Config Panel */}
+          <div className="w-2/3 pl-4">
+            {selected ? (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-800">{selected.name}</h3>
+                    {selected.description && (
+                      <p className="text-sm text-gray-500">{selected.description}</p>
+                    )}
+                  </div>
                   <a
-                    href={provider.docs}
+                    href={selected.docs}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800"
+                    className="text-sm text-blue-600 hover:text-blue-800"
                   >
-                    📄 文档
+                    查看文档
                   </a>
                 </div>
-              </div>
 
-              {provider.isConfigured && provider.currentModel && (
-                <p className="text-xs text-gray-500 mt-1">
-                  当前模型：{provider.currentModel}
-                </p>
-              )}
+                {selected.isConfigured && (
+                  <div className="mb-4 p-3 bg-green-50 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      已配置 | 模型: {selected.currentModel}
+                    </p>
+                  </div>
+                )}
 
-              {/* 测试连接按钮 */}
-              {provider.isConfigured && (
-                <div className="mt-3">
-                  <button
-                    onClick={() => handleTestConnection(provider.key)}
-                    disabled={testingProvider === provider.key}
-                    className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50"
-                  >
-                    {testingProvider === provider.key ? '测试中...' : '🔌 测试连接'}
-                  </button>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      API Key *
+                    </label>
+                    <input
+                      type="password"
+                      value={config.apiKey}
+                      onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      placeholder="sk-..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      API Endpoint
+                    </label>
+                    <input
+                      type="text"
+                      value={config.apiEndpoint}
+                      onChange={(e) => setConfig({ ...config, apiEndpoint: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      默认: {providerTemplate?.defaultEndpoint}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      模型名称
+                    </label>
+                    <input
+                      type="text"
+                      value={config.model}
+                      onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      默认: {providerTemplate?.defaultModel}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Max Token
+                    </label>
+                    <input
+                      type="number"
+                      value={config.maxToken}
+                      onChange={(e) => setConfig({ ...config, maxToken: parseInt(e.target.value) || 4096 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                      min="1"
+                      max="128000"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      默认: {providerTemplate?.defaultMaxToken || 4096}
+                    </p>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
 
-        {/* 测试结果显示 */}
-        {testResult && (
-          <div className={`mt-4 p-3 rounded-lg ${
-            testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-          }`}>
-            {testResult.success ? '✅' : '❌'} {testResult.message}
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={handleSaveConfig}
+                    disabled={saving}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {saving ? '保存中...' : '保存配置'}
+                  </button>
+                  <button
+                    onClick={() => selectedProvider && handleTestConnection(selectedProvider, true)}
+                    disabled={testingProvider === selectedProvider || !config.apiKey}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    {testingProvider === selectedProvider ? '测试中...' : '测试连接'}
+                  </button>
+                  {!selected.isCurrent && selected.isConfigured && (
+                    <button
+                      onClick={() => selectedProvider && handleActivateProvider(selectedProvider)}
+                      disabled={activatingProvider === selectedProvider}
+                      className="px-4 py-2 bg-green-100 text-green-700 rounded hover:bg-green-200 disabled:opacity-50"
+                    >
+                      {activatingProvider === selectedProvider ? '激活中...' : '设为当前'}
+                    </button>
+                  )}
+                </div>
+
+                {selectedProvider && testResults[selectedProvider] && (
+                  <div className={testResults[selectedProvider].success ? 'mt-4 p-3 rounded-lg bg-green-50 text-green-800' : 'mt-4 p-3 rounded-lg bg-red-50 text-red-800'}>
+                    {testResults[selectedProvider].success ? '✓' : '✗'} {testResults[selectedProvider].message}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-12">
+                请选择左侧的 Provider 进行配置
+              </div>
+            )}
           </div>
-        )}
-
-        {/* 配置说明 */}
-        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <h4 className="text-sm font-medium text-yellow-800 mb-2">📝 配置说明</h4>
-          <ul className="text-xs text-yellow-700 space-y-1">
-            <li>• 编辑服务器根目录的 <code>.env</code> 文件</li>
-            <li>• 添加对应的 API Key 环境变量</li>
-            <li>• 重启服务器使配置生效</li>
-            <li>• 国内用户建议使用 DeepSeek、智谱 AI 或 Kimi</li>
-          </ul>
         </div>
       </div>
-
-      {/* 配置表单（弹窗） */}
-      {editingProvider && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold mb-4">
-              配置 {providers.find(p => p.key === editingProvider)?.name}
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  API Key *
-                </label>
-                <input
-                  type="password"
-                  value={config.apiKey}
-                  onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  placeholder="sk-..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  API Endpoint
-                </label>
-                <input
-                  type="text"
-                  value={config.apiEndpoint}
-                  onChange={(e) => setConfig({ ...config, apiEndpoint: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  placeholder="https://api.xxx.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  模型名称
-                </label>
-                <input
-                  type="text"
-                  value={config.model}
-                  onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                  placeholder="例如：gpt-4o"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={handleSaveConfig}
-                className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-              >
-                查看配置方法
-              </button>
-              <button
-                onClick={() => setEditingProvider(null)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

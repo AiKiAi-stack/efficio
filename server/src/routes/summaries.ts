@@ -1,6 +1,15 @@
 import { Router } from 'express';
 import { supabase, isMemoryMode } from '../lib/database';
-import { anthropic, isAiAvailable, generateWeeklySummaryWithoutAI } from '../lib/ai';
+import {
+  anthropic,
+  isAiAvailable,
+  generateWeeklySummaryWithoutAI,
+  generateEnhancedSummaryWithoutAI,
+  analyzeTimeDistribution,
+  generateWorkInsights,
+  generatePersonalizedRecommendations,
+  EnhancedSummaryRequest
+} from '../lib/ai';
 
 export const summariesRouter = Router();
 
@@ -241,7 +250,7 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
 summariesRouter.post('/range', async (req, res) => {
   try {
     const userId = req.headers['x-user-id'] as string;
-    const { date, start_date, end_date } = req.body;
+    const { date, start_date, end_date, enhanced } = req.body;
 
     if (!userId) {
       return res.status(401).json({
@@ -293,91 +302,153 @@ summariesRouter.post('/range', async (req, res) => {
     if (recordsRes.error) throw recordsRes.error;
     if (taskLogsRes.error) throw taskLogsRes.error;
 
-    if (!date && !start_date) {
-      return res.status(404).json({
-        success: false,
-        error: '该时间段暂无记录'
-      });
-    }
+    const periodLabel = date ? `单日总结 (${date})` : `时间段总结 (${start_date} 至 ${end_date})`;
 
     let markdownContent = '';
+    let timeDistribution = null;
+    let insights = null;
+    let recommendations = null;
+    let metrics = null;
 
     if (anthropic && isAiAvailable) {
       // 构建上下文
       const recordsContext = records.map(r => {
         const structured = r.structured_data ? JSON.stringify(r.structured_data) : '无';
         const content = r.optimized_text || r.original_text;
-        return `- [工作] [${new Date(r.created_at).toLocaleDateString('zh-CN')}] ${content}\n  结构化：${structured}`;
+        const hour = new Date(r.created_at).getHours();
+        return `- [工作] [${new Date(r.created_at).toLocaleDateString('zh-CN')} ${hour}:00] ${content}\n  结构化：${structured}`;
       }).join('\n');
 
       const taskLogsContext = taskLogs.map(t => {
         const outcome = t.outcome || '无结果';
         const reflection = t.reflection ? `\n    反思：${t.reflection}` : '';
         const timeInfo = t.time_spent_minutes ? ` (${t.time_spent_minutes}分钟)` : '';
-        return `- [任务] ${t.task_title}${timeInfo}\n  结果：${outcome}${reflection}`;
+        const priority = t.priority ? ` [${t.priority === 'high' ? '高优先级' : t.priority === 'medium' ? '中优先级' : '低优先级'}]` : '';
+        return `- [任务]${priority} ${t.task_title}${timeInfo}\n  结果：${outcome}${reflection}`;
       }).join('\n');
 
-      const periodLabel = date ? `单日总结 (${date})` : `时间段总结 (${start_date} 至 ${end_date})`;
+      // 先计算基础统计数据
+      const totalRecords = records.length;
+      const totalTasks = taskLogs.length;
+      const completedTasks = taskLogs.filter(t => t.status === 'completed').length;
+      const deepWorkCount = records.filter(r => r.structured_data?.is_deep_work).length;
+      const highValueCount = records.filter(r => r.structured_data?.value_level === 'high').length;
+      const avgInterruption = totalRecords > 0
+        ? (records.reduce((sum, r) => sum + (r.structured_data?.interruptions || 0), 0) / totalRecords).toFixed(1)
+        : '0';
 
+      // 使用增强的 prompt 生成详细分析
       const message = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2048,
+        max_tokens: 4096,
         system: `你是一个专业的效率分析助手。请根据用户的工作记录生成${periodLabel}。
 
 请分析以下维度并生成 Markdown 格式报告：
 
-1. **完成的任务** - 列出完成的主要任务
-2. **工作记录分析** - 总结工作内容和类别
-3. **时间分配** - 时间是如何使用的
-4. **亮点与成就** - 值得肯定的成果
-5. **改进空间** - 可以优化的地方
+1. **总体概览** - 统计数据摘要（工作记录数、任务数、完成率等）
+2. **时间分布分析** - 分析工作时段模式、高峰时段、深度工作窗口
+3. **工作洞察** - 生产力评分、专注质量、价值贡献分析
+4. **任务完成情况** - 详细分析完成的任务和待办
+5. **亮点与成就** - 值得肯定的高价值工作
+6. **改进建议** - 基于数据给出 3-5 条具体可执行的改进建议
+
+基础统计数据（可直接使用）：
+- 总记录数：${totalRecords}
+- 总任务数：${totalTasks}
+- 已完成任务：${completedTasks} (${totalTasks > 0 ? Math.round(completedTasks / totalTasks * 100) : 0}%)
+- 深度工作次数：${deepWorkCount}
+- 高价值工作：${highValueCount}
+- 平均打断分数：${avgInterruption}
 
 报告格式：
 \`\`\`markdown
 # ${periodLabel}
 
-## ✅ 完成的任务
-[任务完成情况]
+## 📊 总体概览
+[统计数据表格]
 
-## 📝 工作记录
-[工作内容总结]
+## ⏱️ 时间分布分析
+[工作时段模式、高峰时段、深度工作窗口分析]
 
-## ⏱️ 时间分配
-[时间使用情况]
+## 🎯 工作洞察
+[生产力评分、专注质量、价值贡献]
+
+## ✅ 任务完成情况
+[任务详情和完成状态]
 
 ## ⭐ 亮点与成就
-[值得肯定的地方]
+[高价值工作亮点]
 
-## 🔄 改进空间
-[可以优化的地方]
+## 💡 改进建议
+[具体可执行的改进建议]
 \`\`\`
 
-请直接返回 Markdown 内容，不要解释。`,
+要求：
+- 分析要有深度，不要泛泛而谈
+- 建议必须具体可执行
+- 使用数据和证据支撑分析
+- 直接返回 Markdown 内容，不要解释`,
         messages: [
           {
             role: 'user',
-            content: `请根据以下记录生成总结报告：\n\n工作记录:\n${recordsContext}\n\n任务记录:\n${taskLogsContext}`
+            content: `请根据以下记录生成详细的总结报告：
+
+工作记录:
+${recordsContext || '暂无工作记录'}
+
+任务记录:
+${taskLogsContext || '暂无任务记录'}`
           }
         ]
       });
 
       markdownContent = message.content[0].type === 'text' ? message.content[0].text : '';
+
+      // 生成额外的结构化分析数据
+      if (enhanced) {
+        timeDistribution = analyzeTimeDistribution(records);
+        insights = generateWorkInsights(records, taskLogs);
+        recommendations = generatePersonalizedRecommendations(insights, timeDistribution, records);
+      }
     } else {
-      // 降级模式：生成简单的文字总结
-      const periodLabel = date ? `单日 (${date})` : `时间段 (${start_date} 至 ${end_date})`;
-      markdownContent = `# ${periodLabel} 总结
+      // 降级模式：使用增强的本地分析
+      const enhancedRequest: EnhancedSummaryRequest = {
+        records,
+        taskLogs,
+        startDate: date || start_date,
+        endDate: date || end_date,
+        includeTimeAnalysis: true,
+        includeInsights: true,
+        includeRecommendations: true
+      };
 
-## ✅ 完成的任务
-- 完成任务数量：${taskLogs.filter(t => t.status === 'completed').length}
-- 工作记录数量：${records.length}
-
-## 📝 概览
-${records.length > 0 ? '- 有 ' + records.length + ' 条工作记录' : '- 暂无工作记录'}
-${taskLogs.length > 0 ? '- 有 ' + taskLogs.length + ' 条任务记录' : '- 暂无任务记录'}
-
-> 注：AI 功能未配置，以上为简单统计。配置 AI 后可获得详细分析。`;
-      console.log('使用降级模式生成时间段总结');
+      const enhancedResult = generateEnhancedSummaryWithoutAI(enhancedRequest);
+      markdownContent = enhancedResult.markdown_content;
+      timeDistribution = enhancedResult.time_distribution;
+      insights = enhancedResult.insights;
+      recommendations = enhancedResult.recommendations;
+      metrics = enhancedResult.metrics;
+      console.log('使用降级模式生成增强总结');
     }
+
+    // 计算指标
+    metrics = metrics || {
+      totalRecords: records.length,
+      totalTasks: taskLogs.length,
+      completedTasks: taskLogs.filter(t => t.status === 'completed').length,
+      totalDeepWorkHours: records
+        .filter(r => r.structured_data?.is_deep_work)
+        .reduce((sum, r) => {
+          const timeSpent = r.structured_data?.time_spent || '1h';
+          return sum + (parseFloat(timeSpent.replace(/[^0-9.]/g, '')) || 1);
+        }, 0),
+      averageInterruptionScore: records.length > 0
+        ? Math.round(records.reduce((sum, r) => sum + (r.structured_data?.interruptions || 0), 0) / records.length * 10) / 10
+        : 0,
+      highValueWorkPercentage: records.length > 0
+        ? Math.round(records.filter(r => r.structured_data?.value_level === 'high').length / records.length * 100)
+        : 0
+    };
 
     // 返回总结
     const summaryData = {
@@ -395,6 +466,10 @@ ${taskLogs.length > 0 ? '- 有 ' + taskLogs.length + ' 条任务记录' : '- 暂
       user_id: userId,
       summary_data: summaryData,
       markdown_content: markdownContent,
+      time_distribution: timeDistribution,
+      insights: insights,
+      recommendations: recommendations,
+      metrics: metrics,
       created_at: new Date().toISOString()
     };
 
@@ -407,6 +482,70 @@ ${taskLogs.length > 0 ? '- 有 ' + taskLogs.length + ' 条任务记录' : '- 暂
     res.status(500).json({
       success: false,
       error: '生成总结失败'
+    });
+  }
+});
+
+// 获取增强的洞察分析
+summariesRouter.post('/insights', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] as string;
+    const { start_date, end_date } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: '未授权'
+      });
+    }
+
+    if (!start_date || !end_date) {
+      return res.status(400).json({
+        success: false,
+        error: '请提供日期范围 (start_date, end_date)'
+      });
+    }
+
+    // 获取记录
+    const [recordsRes, taskLogsRes] = await Promise.all([
+      supabase
+        .from('work_records')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('created_at', start_date)
+        .lte('created_at', end_date + 'T23:59:59.999Z'),
+      supabase
+        .from('task_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('created_at', start_date)
+        .lte('created_at', end_date + 'T23:59:59.999Z')
+    ]);
+
+    const records = recordsRes.data || [];
+    const taskLogs = taskLogsRes.data || [];
+
+    if (recordsRes.error) throw recordsRes.error;
+    if (taskLogsRes.error) throw taskLogsRes.error;
+
+    // 生成洞察
+    const timeDistribution = analyzeTimeDistribution(records);
+    const insights = generateWorkInsights(records, taskLogs);
+    const recommendations = generatePersonalizedRecommendations(insights, timeDistribution, records);
+
+    res.json({
+      success: true,
+      data: {
+        time_distribution: timeDistribution,
+        insights,
+        recommendations
+      }
+    });
+  } catch (error) {
+    console.error('Generate insights error:', error);
+    res.status(500).json({
+      success: false,
+      error: '生成洞察失败'
     });
   }
 });

@@ -118,6 +118,11 @@ class QueryBuilder {
     return this;
   }
 
+  lte(column: string, value: any) {
+    this.filters.push({ column, op: 'lte', value });
+    return this;
+  }
+
   order(column: string, { ascending }: { ascending: boolean }) {
     this.orderBy = { column, ascending };
     return this;
@@ -140,6 +145,8 @@ class QueryBuilder {
             return new Date(itemValue).toISOString() >= filter.value;
           case 'lt':
             return new Date(itemValue).toISOString() < filter.value;
+          case 'lte':
+            return new Date(itemValue).toISOString() <= filter.value;
           default:
             return true;
         }
@@ -164,12 +171,16 @@ class QueryBuilder {
     return { data: result.length > 0 ? result[0] : null, error: null };
   }
 
-  async then(resolve: any, reject: any) {
+  // 实现 then 方法以支持 await - 返回正确的 Promise 类型
+  then<TResult1 = any, TResult2 = never>(
+    resolve?: ((value: any) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+    reject?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null
+  ): PromiseLike<TResult1 | TResult2> {
     try {
       const result = this.applyFilters();
-      resolve({ data: result, error: null });
+      return Promise.resolve({ data: result, error: null }).then(resolve, reject);
     } catch (error) {
-      resolve({ data: null, error });
+      return Promise.resolve({ data: null, error }).then(resolve, reject);
     }
   }
 }
@@ -222,10 +233,28 @@ class TableOperation {
   }
 
   delete() {
+    const self = this;
     return {
-      eq: (column: string, value: any) => ({
-        data: []
-      })
+      eq: (column: string, value: any) => {
+        return {
+          eq: (column2: string, value2: any) => {
+            const store = inMemoryStore[self.tableName as keyof typeof inMemoryStore] as any[];
+            const index = store.findIndex((item: any) => item[column] === value && item[column2] === value2);
+            if (index !== -1) {
+              store.splice(index, 1);
+            }
+            return Promise.resolve({ data: null, error: null });
+          },
+          then: (resolve: any, reject: any) => {
+            const store = inMemoryStore[self.tableName as keyof typeof inMemoryStore] as any[];
+            const index = store.findIndex((item: any) => item[column] === value);
+            if (index !== -1) {
+              store.splice(index, 1);
+            }
+            return Promise.resolve({ data: null, error: null }).then(resolve, reject);
+          }
+        };
+      }
     };
   }
 }

@@ -194,11 +194,13 @@ taskLogsRouter.delete('/:id', async (req, res) => {
       return res.json({ success: true, data: null });
     }
 
-    const { error } = await supabase
+    const result = await supabase
       .from('task_logs')
       .delete()
       .eq('id', taskId)
-      .eq('user_id', userId);
+      .eq('user_id', userId) as any;
+
+    const error = result.error;
 
     if (error) throw error;
 

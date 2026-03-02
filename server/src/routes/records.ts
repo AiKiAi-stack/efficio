@@ -16,17 +16,20 @@ recordsRouter.get('/', async (req, res) => {
       });
     }
 
-    const { data, error } = await supabase
+    const result = await (supabase
       .from('work_records')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }) as any);
+
+    const data = result.data || [];
+    const error = result.error;
 
     if (error) throw error;
 
     res.json({
       success: true,
-      data: data || []
+      data
     });
   } catch (error) {
     console.error('Get records error:', error);
@@ -83,7 +86,7 @@ recordsRouter.post('/', async (req, res) => {
 
 3. tools_used: 使用的工具列表 - 如 ["VSCode", "Git", "Slack", "Jira"]
 
-4. tags: 标签列表 - 2-5 个关键词标签
+4. tags: 标签列表 - 2-5 个关键词
 
 5. is_deep_work: 是否需要深度专注（boolean）
 
@@ -121,7 +124,7 @@ recordsRouter.post('/', async (req, res) => {
       structuredData = analyzeWithoutAI(textToAnalyze);
     }
 
-    const { data, error } = await supabase
+    const result = await (supabase
       .from('work_records')
       .insert([{
         user_id: userId,
@@ -130,7 +133,10 @@ recordsRouter.post('/', async (req, res) => {
         structured_data: structuredData
       }])
       .select()
-      .single();
+      .single() as any);
+
+    const data = result.data;
+    const error = result.error;
 
     if (error) throw error;
 
@@ -152,11 +158,14 @@ recordsRouter.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { data, error } = await supabase
+    const result = await (supabase
       .from('work_records')
       .select('*')
       .eq('id', id)
-      .single();
+      .single() as any);
+
+    const data = result.data;
+    const error = result.error;
 
     if (error) throw error;
 
@@ -178,10 +187,12 @@ recordsRouter.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { error } = await supabase
+    const result = await (supabase
       .from('work_records')
       .delete()
-      .eq('id', id);
+      .eq('id', id) as any);
+
+    const error = result.error;
 
     if (error) throw error;
 
