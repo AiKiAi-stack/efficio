@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { configManager } from './config-manager';
 
 // 支持多 AI Provider 配置
 interface AIProviderConfig {
@@ -8,103 +9,196 @@ interface AIProviderConfig {
   model?: string;
 }
 
-// 从环境变量读取配置
+// 动态获取 Provider 配置（从 configManager 读取最新配置）
 const getProviderConfig = (): AIProviderConfig => {
-  // 优先使用配置的 provider
-  const provider = (process.env.AI_PROVIDER || 'anthropic') as AIProviderConfig['provider'];
+  const config = configManager.read();
+
+  // 优先使用配置的 provider，其次使用环境变量
+  const provider = (config.AI_PROVIDER || process.env.AI_PROVIDER || 'anthropic') as AIProviderConfig['provider'];
+
+  const getEnv = (key: string, fallback?: string) => {
+    return config[key] || process.env[key as keyof typeof process.env] || fallback;
+  };
 
   const configs: Record<string, Partial<AIProviderConfig>> = {
     anthropic: {
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      apiEndpoint: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-6'
+      apiKey: getEnv('ANTHROPIC_API_KEY'),
+      apiEndpoint: getEnv('ANTHROPIC_ENDPOINT', 'https://api.anthropic.com'),
+      model: getEnv('ANTHROPIC_MODEL', 'claude-sonnet-4-6')
     },
     openai: {
-      apiKey: process.env.OPENAI_API_KEY,
-      apiEndpoint: 'https://api.openai.com/v1',
-      model: 'gpt-4o'
+      apiKey: getEnv('OPENAI_API_KEY'),
+      apiEndpoint: getEnv('OPENAI_ENDPOINT', 'https://api.openai.com/v1'),
+      model: getEnv('OPENAI_MODEL', 'gpt-4o')
     },
     deepseek: {
-      apiKey: process.env.DEEPSEEK_API_KEY,
-      apiEndpoint: 'https://api.deepseek.com/v1',
-      model: 'deepseek-chat'
+      apiKey: getEnv('DEEPSEEK_API_KEY'),
+      apiEndpoint: getEnv('DEEPSEEK_ENDPOINT', 'https://api.deepseek.com/v1'),
+      model: getEnv('DEEPSEEK_MODEL', 'deepseek-chat')
     },
     zhipu: {
-      apiKey: process.env.ZHIPU_API_KEY,
-      apiEndpoint: 'https://open.bigmodel.cn/api/paas/v4',
-      model: 'glm-4'
+      apiKey: getEnv('ZHIPU_API_KEY'),
+      apiEndpoint: getEnv('ZHIPU_ENDPOINT', 'https://open.bigmodel.cn/api/paas/v4'),
+      model: getEnv('ZHIPU_MODEL', 'glm-4')
     },
     kimi: {
-      apiKey: process.env.KIMI_API_KEY,
-      apiEndpoint: 'https://api.moonshot.cn/v1',
-      model: 'moonshot-v1-8k'
+      apiKey: getEnv('KIMI_API_KEY'),
+      apiEndpoint: getEnv('KIMI_ENDPOINT', 'https://api.moonshot.cn/v1'),
+      model: getEnv('KIMI_MODEL', 'moonshot-v1-8k')
     },
-    // 新增 Provider 配置
     nvidia: {
-      apiKey: process.env.NVIDIA_API_KEY,
-      apiEndpoint: 'https://integrate.api.nvidia.com/v1',
-      model: 'meta/llama3-70b-instruct'
+      apiKey: getEnv('NVIDIA_API_KEY'),
+      apiEndpoint: getEnv('NVIDIA_ENDPOINT', 'https://integrate.api.nvidia.com/v1'),
+      model: getEnv('NVIDIA_MODEL', 'meta/llama3-70b-instruct')
     },
     vllm: {
-      apiKey: process.env.VLLM_API_KEY || 'vllm', // vLLM 默认不需要 API Key
-      apiEndpoint: process.env.VLLM_ENDPOINT || 'http://localhost:8000/v1',
-      model: process.env.VLLM_MODEL || 'default'
+      apiKey: getEnv('VLLM_API_KEY', 'vllm'),
+      apiEndpoint: getEnv('VLLM_ENDPOINT', 'http://localhost:8000/v1'),
+      model: getEnv('VLLM_MODEL', 'default')
     },
     aliyun: {
-      apiKey: process.env.ALIYUN_API_KEY,
-      apiEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      model: 'qwen-plus'
+      apiKey: getEnv('ALIYUN_API_KEY'),
+      apiEndpoint: getEnv('ALIYUN_ENDPOINT', 'https://dashscope.aliyuncs.com/compatible-mode/v1'),
+      model: getEnv('ALIYUN_MODEL', 'qwen-plus')
     },
     volcengine: {
-      apiKey: process.env.VOLCENGINE_API_KEY,
-      apiEndpoint: 'https://ark.cn-beijing.volces.com/api/v3',
-      model: 'doubao-pro-4k'
+      apiKey: getEnv('VOLCENGINE_API_KEY'),
+      apiEndpoint: getEnv('VOLCENGINE_ENDPOINT', 'https://ark.cn-beijing.volces.com/api/v3'),
+      model: getEnv('VOLCENGINE_MODEL', 'doubao-pro-4k')
     },
     minimax: {
-      apiKey: process.env.MINIMAX_API_KEY,
-      apiEndpoint: 'https://api.minimaxi.com/v1',
-      model: 'MiniMax2.5'
+      apiKey: getEnv('MINIMAX_API_KEY'),
+      apiEndpoint: getEnv('MINIMAX_ENDPOINT', 'https://api.minimaxi.com/v1'),
+      model: getEnv('MINIMAX_MODEL', 'MiniMax2.5')
     },
     openrouter: {
-      apiKey: process.env.OPENROUTER_API_KEY,
-      apiEndpoint: 'https://openrouter.ai/api/v1',
-      model: 'openai/gpt-4o' // OpenRouter 支持多个模型，默认使用 GPT-4o
+      apiKey: getEnv('OPENROUTER_API_KEY'),
+      apiEndpoint: getEnv('OPENROUTER_ENDPOINT', 'https://openrouter.ai/api/v1'),
+      model: getEnv('OPENROUTER_MODEL', 'openai/gpt-4o')
     }
   };
 
   return { provider, ...configs[provider] } as AIProviderConfig;
 };
 
-const config = getProviderConfig();
+// 延迟初始化，在首次使用时才读取配置
+let _anthropic: Anthropic | null = null;
+let _isAiAvailable = false;
+let _currentProvider: AIProviderConfig | null = null;
+let _initialized = false;
 
-// Anthropic 客户端
-const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
-export let anthropic: Anthropic | null = null;
+// 初始化 AI 配置
+const initAI = () => {
+  if (_initialized) return;
+  _initialized = true;
 
-if (anthropicApiKey) {
-  anthropic = new Anthropic({ apiKey: anthropicApiKey });
+  const config = getProviderConfig();
+  const fullConfig = configManager.read();
+
+  // 根据 provider 获取对应的 API Key
+  const providerKey = config.provider.toUpperCase();
+  const apiKey = fullConfig[`${providerKey}_API_KEY`] || process.env[`${providerKey}_API_KEY` as keyof typeof process.env];
+
+  // 初始化 Anthropic 客户端（如果是 anthropic provider）
+  if (config.provider === 'anthropic' && apiKey) {
+    _anthropic = new Anthropic({ apiKey });
+    _currentProvider = config;
+    _isAiAvailable = true;
+    console.log(`✅ AI Provider 已配置：${config.provider} (${config.model})`);
+  } else if (apiKey) {
+    // 其他 Provider，只要有 API Key 就认为 AI 可用
+    _currentProvider = config;
+    _isAiAvailable = true;
+    console.log(`✅ AI Provider 已配置：${config.provider} (${config.model})`);
+  } else {
+    console.log('⚠️  AI Provider 未配置，AI 功能将降级运行');
+  }
+};
+
+// 懒加载 getter
+export const anthropic: Anthropic | null = null;
+export function getAnthropicClient(): Anthropic | null {
+  initAI();
+  const config = getProviderConfig();
+  const fullConfig = configManager.read();
+  const providerKey = config.provider.toUpperCase();
+  const apiKey = fullConfig[`${providerKey}_API_KEY`] || process.env[`${providerKey}_API_KEY` as keyof typeof process.env];
+
+  if (config.provider === 'anthropic' && apiKey) {
+    if (!_anthropic) {
+      _anthropic = new Anthropic({ apiKey });
+    }
+    return _anthropic;
+  }
+  return null;
 }
 
-// 通用 AI 客户端（支持多 provider）
-let currentProvider: AIProviderConfig | null = null;
-let isAiAvailable = false;
+// 通用 AI 消息生成函数（支持多 Provider）
+export async function generateAIResponse(options: {
+  system: string;
+  userMessage: string;
+  maxTokens?: number;
+}): Promise<string> {
+  initAI();
+  const config = getProviderConfig();
+  const fullConfig = configManager.read();
+  const providerKey = config.provider.toUpperCase();
+  const apiKey = fullConfig[`${providerKey}_API_KEY`] || process.env[`${providerKey}_API_KEY` as keyof typeof process.env];
 
-if (config.apiKey) {
-  currentProvider = config;
-  isAiAvailable = true;
-  console.log(`✅ AI Provider 已配置：${config.provider} (${config.model})`);
-} else if (anthropicApiKey) {
-  isAiAvailable = true;
-  console.log('✅ Anthropic AI 已配置');
-} else {
-  console.log('⚠️  AI Provider 未配置，AI 功能将降级运行');
+  if (!apiKey) {
+    throw new Error('AI Provider 未配置');
+  }
+
+  const provider = config.provider;
+  const model = config.model || 'claude-sonnet-4-6';
+  const maxTokens = options.maxTokens || 2048;
+
+  // Anthropic Provider
+  if (provider === 'anthropic') {
+    const client = new Anthropic({ apiKey });
+    const message = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      system: options.system,
+      messages: [{ role: 'user', content: options.userMessage }]
+    });
+    return message.content[0].type === 'text' ? message.content[0].text : '';
+  }
+
+  // OpenAI 兼容 Provider（包括 OpenAI、DeepSeek、Zhipu、Kimi、Nvidia、Aliyun、Volcengine、Minimax、OpenRouter、vLLM）
+  const { OpenAI } = await import('openai');
+  const endpoint = config.apiEndpoint;
+
+  const client = new OpenAI({
+    apiKey,
+    baseURL: endpoint
+  });
+
+  const completion = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: options.system },
+      { role: 'user', content: options.userMessage }
+    ],
+    max_tokens: maxTokens
+  });
+
+  return completion.choices[0]?.message?.content || '';
 }
 
-export { isAiAvailable };
+export function isAiAvailable(): boolean {
+  initAI();
+  const config = getProviderConfig();
+  const fullConfig = configManager.read();
+  const providerKey = config.provider.toUpperCase();
+  const apiKey = fullConfig[`${providerKey}_API_KEY`] || process.env[`${providerKey}_API_KEY` as keyof typeof process.env];
+  return !!apiKey;
+}
 
 // 获取当前配置的 provider 信息
 export function getCurrentProvider(): AIProviderConfig | null {
-  return currentProvider;
+  initAI();
+  return getProviderConfig();
 }
 
 // 获取所有可用的 provider 配置模板

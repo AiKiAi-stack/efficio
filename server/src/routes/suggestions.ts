@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase, isMemoryMode } from '../lib/database';
-import { anthropic, isAiAvailable, generateSuggestionsWithoutAI } from '../lib/ai';
+import { generateAIResponse, isAiAvailable, generateSuggestionsWithoutAI } from '../lib/ai';
 
 export const suggestionsRouter = Router();
 
@@ -82,11 +82,9 @@ suggestionsRouter.post('/generate', async (req, res) => {
 
     let suggestionData;
 
-    if (anthropic && isAiAvailable) {
+    if (isAiAvailable()) {
       // 调用 AI 生成优化建议
-      const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1536,
+      const content = await generateAIResponse({
         system: `你是一个专业的效率优化顾问。请根据用户的工作记录和历史总结生成具体的优化建议。
 
 请分析以下维度并生成建议：
@@ -115,22 +113,16 @@ suggestionsRouter.post('/generate', async (req, res) => {
     }
   ]
 }`,
-        messages: [
-          {
-            role: 'user',
-            content: `请根据以下数据生成优化建议：
+        userMessage: `请根据以下数据生成优化建议：
 
 最近工作记录（最多 50 条）：
 ${records.map(r => `- ${new Date(r.created_at).toLocaleDateString('zh-CN')}: ${r.optimized_text || r.original_text}${r.structured_data ? ` [${JSON.stringify(r.structured_data)}]` : ''}`).join('\n')}
 
 ${recentSummaries && recentSummaries.length > 0 ? `
 最近周总结：
-${recentSummaries.map(s => s.markdown_content).join('\n\n')}` : ''}`
-          }
-        ]
+${recentSummaries.map(s => s.markdown_content).join('\n\n')}` : ''}`,
+        maxTokens: 1536
       });
-
-      const content = message.content[0].type === 'text' ? message.content[0].text : '';
 
       // 解析 JSON
       let jsonStr = content.trim();

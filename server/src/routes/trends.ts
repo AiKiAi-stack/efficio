@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../lib/database';
-import { anthropic } from '../lib/ai';
+import { generateAIResponse, isAiAvailable } from '../lib/ai';
 
 export const trendsRouter = Router();
 
@@ -98,10 +98,11 @@ trendsRouter.post('/monthly/generate', async (req, res) => {
     const stats = calculateMonthlyStats(records);
 
     // 调用 AI 生成月趋势分析
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system: `你是一个专业的效率分析助手。请根据用户本月的工作记录和统计数据生成月趋势分析报告。
+    let markdownContent = '';
+
+    if (isAiAvailable()) {
+      markdownContent = await generateAIResponse({
+        system: `你是一个专业的效率分析助手。请根据用户本月的工作记录和统计数据生成月趋势分析报告。
 
 请分析以下维度并生成 Markdown 格式报告：
 
@@ -140,21 +141,16 @@ trendsRouter.post('/monthly/generate', async (req, res) => {
 \`\`\`
 
 请直接返回 Markdown 内容，不要解释。`,
-      messages: [
-        {
-          role: 'user',
-          content: `请根据以下本月数据生成月趋势分析报告：
+        userMessage: `请根据以下本月数据生成月趋势分析报告：
 
 记录总数：${records.length}
 统计数据：${JSON.stringify(stats, null, 2)}
 
 工作记录详情：
-${records.map(r => `- [${new Date(r.created_at).toLocaleDateString('zh-CN')}] ${r.optimized_text || r.original_text}`).join('\n')}`
-        }
-      ]
-    });
-
-    const markdownContent = message.content[0].type === 'text' ? message.content[0].text : '';
+${records.map(r => `- [${new Date(r.created_at).toLocaleDateString('zh-CN')}] ${r.optimized_text || r.original_text}`).join('\n')}`,
+        maxTokens: 2048
+      });
+    }
 
     const trendData = {
       year,

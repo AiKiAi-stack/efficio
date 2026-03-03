@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { anthropic, isAiAvailable, optimizeWithoutAI } from '../lib/ai';
+import { generateAIResponse, isAiAvailable, optimizeWithoutAI } from '../lib/ai';
 
 export const optimizeRouter = Router();
 
@@ -17,11 +17,9 @@ optimizeRouter.post('/', async (req, res) => {
 
     let optimizedText = '';
 
-    if (anthropic && isAiAvailable) {
+    if (isAiAvailable()) {
       // 使用 AI 优化
-      const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
+      optimizedText = await generateAIResponse({
         system: `你是一个专业的工作记录优化助手。你的任务是：
 1. 将用户的原始工作记录整理成清晰、专业的表达
 2. 保持原意，不添加不存在的内容
@@ -30,17 +28,9 @@ optimizeRouter.post('/', async (req, res) => {
 5. 如果原始内容太简单，可以适当扩展但不要编造
 
 请直接返回优化后的文本，不要添加任何解释。`,
-        messages: [
-          {
-            role: 'user',
-            content: `请优化以下工作记录：\n\n${text}`
-          }
-        ]
+        userMessage: `请优化以下工作记录：\n\n${text}`,
+        maxTokens: 1024
       });
-
-      optimizedText = message.content[0].type === 'text'
-        ? message.content[0].text
-        : '';
     } else {
       // 降级模式：简单优化
       optimizedText = optimizeWithoutAI(text);

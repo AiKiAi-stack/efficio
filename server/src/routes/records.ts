@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase, isMemoryMode } from '../lib/database';
-import { anthropic, analyzeWithoutAI, isAiAvailable } from '../lib/ai';
+import { generateAIResponse, analyzeWithoutAI, isAiAvailable } from '../lib/ai';
 
 export const recordsRouter = Router();
 
@@ -66,11 +66,9 @@ recordsRouter.post('/', async (req, res) => {
     let structuredData = null;
 
     try {
-      if (anthropic && isAiAvailable) {
+      if (isAiAvailable()) {
         // 使用 AI 分析
-        const message = await anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1024,
+        const content = await generateAIResponse({
           system: `你是一个专业的结构化数据抽取助手。请从用户的工作记录中提取以下信息：
 
 1. task_category: 任务类别 - 从以下选择最匹配的：
@@ -95,15 +93,9 @@ recordsRouter.post('/', async (req, res) => {
 7. value_level: 价值等级 "high" | "medium" | "low"
 
 请以纯 JSON 格式返回，不要任何解释或多余文字。`,
-          messages: [
-            {
-              role: 'user',
-              content: `请分析以下工作记录并提取结构化数据：\n\n${textToAnalyze}`
-            }
-          ]
+          userMessage: `请分析以下工作记录并提取结构化数据：\n\n${textToAnalyze}`,
+          maxTokens: 1024
         });
-
-        const content = message.content[0].type === 'text' ? message.content[0].text : '';
 
         // 清理 JSON 字符串
         let jsonStr = content.trim();

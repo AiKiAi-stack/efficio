@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { supabase, isMemoryMode } from '../lib/database';
 import {
-  anthropic,
   isAiAvailable,
+  generateAIResponse,
   generateWeeklySummaryWithoutAI,
   generateEnhancedSummaryWithoutAI,
   analyzeTimeDistribution,
@@ -106,7 +106,7 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
 
     let markdownContent = '';
 
-    if (anthropic && isAiAvailable) {
+    if (isAiAvailable()) {
       // 调用 AI 生成周总结
       const recordsContext = records.map(r => {
         const structured = r.structured_data ? JSON.stringify(r.structured_data) : '无结构化数据';
@@ -114,9 +114,7 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
         return `- [${new Date(r.created_at).toLocaleDateString('zh-CN')}] ${content}\n  结构化：${structured}`;
       }).join('\n');
 
-      const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2048,
+      markdownContent = await generateAIResponse({
         system: `你是一个专业的效率分析助手。请根据用户本周的工作记录生成周总结报告。
 
 请分析以下维度并生成 Markdown 格式报告：
@@ -156,15 +154,9 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
 \`\`\`
 
 请直接返回 Markdown 内容，不要解释。`,
-        messages: [
-          {
-            role: 'user',
-            content: `请根据以下本周工作记录生成周总结报告：\n\n${recordsContext}`
-          }
-        ]
+        userMessage: `请根据以下本周工作记录生成周总结报告：\n\n${recordsContext}`,
+        maxTokens: 2048
       });
-
-      markdownContent = message.content[0].type === 'text' ? message.content[0].text : '';
     } else {
       // 降级模式
       markdownContent = generateWeeklySummaryWithoutAI(records);
@@ -310,7 +302,7 @@ summariesRouter.post('/range', async (req, res) => {
     let recommendations = null;
     let metrics = null;
 
-    if (anthropic && isAiAvailable) {
+    if (isAiAvailable()) {
       // 构建上下文
       const recordsContext = records.map(r => {
         const structured = r.structured_data ? JSON.stringify(r.structured_data) : '无';
@@ -338,9 +330,7 @@ summariesRouter.post('/range', async (req, res) => {
         : '0';
 
       // 使用增强的 prompt 生成详细分析
-      const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
+      markdownContent = await generateAIResponse({
         system: `你是一个专业的效率分析助手。请根据用户的工作记录生成${periodLabel}。
 
 请分析以下维度并生成 Markdown 格式报告：
@@ -388,21 +378,15 @@ summariesRouter.post('/range', async (req, res) => {
 - 建议必须具体可执行
 - 使用数据和证据支撑分析
 - 直接返回 Markdown 内容，不要解释`,
-        messages: [
-          {
-            role: 'user',
-            content: `请根据以下记录生成详细的总结报告：
+        userMessage: `请根据以下记录生成详细的总结报告：
 
 工作记录:
 ${recordsContext || '暂无工作记录'}
 
 任务记录:
-${taskLogsContext || '暂无任务记录'}`
-          }
-        ]
+${taskLogsContext || '暂无任务记录'}`,
+        maxTokens: 4096
       });
-
-      markdownContent = message.content[0].type === 'text' ? message.content[0].text : '';
 
       // 生成额外的结构化分析数据
       if (enhanced) {
