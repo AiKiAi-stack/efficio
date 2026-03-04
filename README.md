@@ -7,7 +7,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20+-228f3c.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**[🌐 中文版本](README_zh.md)**
+**[🌐 中文](README_zh.md)**
 
 ---
 
