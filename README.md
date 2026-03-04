@@ -1,4 +1,4 @@
-# RecordEvo - Efficiency Tracker
+# Efficio - Efficiency Tracker
 
 > 🎯 PDCA-based personal/team efficiency analysis tool - Track work, optimize expression, analyze efficiency patterns
 
