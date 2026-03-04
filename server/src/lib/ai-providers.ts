@@ -4,6 +4,8 @@
  * 提供 Provider 模板定义、配置管理和环境变量操作
  */
 
+import { configManager } from './config-manager';
+
 /**
  * Provider 模板接口 - 定义每个 Provider 的元数据
  */
@@ -20,6 +22,15 @@ export interface ProviderTemplate {
 }
 
 /**
+ * 自定义 Provider 接口 - 用户添加的 OpenAI 兼容 Provider
+ */
+export interface CustomProvider extends ProviderTemplate {
+  id: string;           // 唯一标识（UUID）
+  isCustom: true;       // 标记为自定义
+  createdAt: string;    // 创建时间
+}
+
+/**
  * Provider 配置接口 - 运行时使用的完整配置
  */
 export interface ProviderConfig {
@@ -28,6 +39,7 @@ export interface ProviderConfig {
   apiEndpoint: string;
   model: string;
   maxToken: number;
+  isCustom?: boolean;  // 标记是否为自定义 Provider
 }
 
 /**
@@ -172,6 +184,116 @@ export function getAllProviderTemplates(): ProviderTemplate[] {
 }
 
 /**
+ * 获取所有自定义 Provider 列表
+ */
+export function getCustomProviders(): CustomProvider[] {
+  const config = configManager.read();
+  const customProvidersJson = config.CUSTOM_PROVIDERS;
+
+  if (!customProvidersJson) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(customProvidersJson);
+  } catch (error) {
+    console.error('Failed to parse CUSTOM_PROVIDERS:', error);
+    return [];
+  }
+}
+
+/**
+ * 保存自定义 Provider
+ */
+export function saveCustomProvider(provider: CustomProvider): { success: boolean; error?: string } {
+  try {
+    const config = configManager.read();
+    const providers = getCustomProviders();
+
+    // 检查是否已存在相同 ID
+    const existingIndex = providers.findIndex(p => p.id === provider.id);
+
+    if (existingIndex >= 0) {
+      // 更新现有 Provider
+      providers[existingIndex] = provider;
+    } else {
+      // 添加新 Provider
+      providers.push(provider);
+    }
+
+    config.CUSTOM_PROVIDERS = JSON.stringify(providers);
+    const success = configManager.write(config);
+
+    if (!success) {
+      return { success: false, error: '写入配置文件失败' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to save custom provider:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '保存失败'
+    };
+  }
+}
+
+/**
+ * 删除自定义 Provider
+ */
+export function deleteCustomProvider(id: string): { success: boolean; error?: string } {
+  try {
+    const config = configManager.read();
+    const providers = getCustomProviders();
+    const filteredProviders = providers.filter(p => p.id !== id);
+
+    if (filteredProviders.length === providers.length) {
+      return { success: false, error: 'Provider 不存在' };
+    }
+
+    config.CUSTOM_PROVIDERS = JSON.stringify(filteredProviders);
+    const success = configManager.write(config);
+
+    if (!success) {
+      return { success: false, error: '写入配置文件失败' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete custom provider:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '删除失败'
+    };
+  }
+}
+
+/**
+ * 根据 ID 获取自定义 Provider
+ */
+export function getCustomProviderById(id: string): CustomProvider | null {
+  const providers = getCustomProviders();
+  return providers.find(p => p.id === id) || null;
+}
+
+/**
+ * 根据 key 获取自定义 Provider
+ */
+export function getCustomProviderByKey(key: string): CustomProvider | null {
+  const providers = getCustomProviders();
+  return providers.find(p => p.key === key) || null;
+}
+
+/**
+ * 获取所有 Provider（包括预定义和自定义）
+ */
+export function getAllProviders(): Array<ProviderTemplate | CustomProvider> {
+  const builtIn = getAllProviderTemplates();
+  const custom = getCustomProviders();
+  return [...builtIn, ...custom];
+}
+
+/**
  * 从环境变量读取 Provider 配置
  */
 export function getProviderConfig(providerKey: string): ProviderConfig {
@@ -198,12 +320,15 @@ export function getProviderConfig(providerKey: string): ProviderConfig {
 /**
  * 验证 Provider 配置是否有效
  */
-export function validateProviderConfig(config: ProviderConfig): { valid: boolean; errors: string[] } {
+export function validateProviderConfig(config: ProviderConfig, isCustom = false): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
-  const template = getProviderTemplate(config.provider);
 
-  if (!template) {
-    errors.push(`未知的 Provider: ${config.provider}`);
+  // 自定义 Provider 不需要在模板中存在
+  if (!isCustom) {
+    const template = getProviderTemplate(config.provider);
+    if (!template) {
+      errors.push(`未知的 Provider: ${config.provider}`);
+    }
   }
 
   if (!config.apiKey || config.apiKey.trim() === '') {

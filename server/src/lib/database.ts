@@ -269,15 +269,24 @@ class InMemorySupabase {
 // 导出 supabase 实例（可能是真实的或内存的）
 export let supabase: SupabaseClient | InMemorySupabase;
 export let isMemoryMode = false;
+export let isMemoryModeReal = false;
 
-if (supabaseUrl && supabaseServiceKey) {
+if (supabaseUrl && supabaseServiceKey && supabaseUrl !== 'your_supabase_url') {
   supabase = createClient(supabaseUrl, supabaseServiceKey);
   console.log('✅ 使用 Supabase 数据库');
 } else {
   supabase = new InMemorySupabase() as any;
   isMemoryMode = true;
+  isMemoryModeReal = true;
   console.log('⚠️  Supabase 未配置，使用内存存储模式（重启后数据会丢失）');
 }
 
 // 导出内存存储供其他模块使用
 export { inMemoryStore };
+
+/**
+ * 创建内存数据库实例（用于工厂模式）
+ */
+export function createInMemoryDatabase(): InMemorySupabase {
+  return new InMemorySupabase();
+}

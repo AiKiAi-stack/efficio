@@ -1,186 +1,350 @@
-# Efficiency Tracker - 效率追踪器
+# RecordEvo - Efficiency Tracker
 
-> 工作记录与效率分析系统 - Work Record & Efficiency Analysis System
+> 🎯 PDCA-based personal/team efficiency analysis tool - Track work, optimize expression, analyze efficiency patterns
 
-一个基于 AI 的个人/团队效率分析工具，帮助你记录工作、优化表达、分析效率模式。
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-18.2-087ea4.svg)](https://react.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-228f3c.svg)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 🎯 核心功能
+**[🌐 中文版本](README_zh.md)**
 
-- **工作记录** - 简单快速的每日工作记录
-- **AI 优化** - 自动优化工作表达，突出价值
-- **历史记录** - 长期存储和查看
-- **结构化分析** - 任务分类、时间提取、标签生成
-- **周/月总结** - 自动生成效率报告
-- **优化建议** - 基于数据的行动建议
+---
 
-## 🏗️ 技术栈
+## ✨ Features
 
-### 后端
-- Node.js + Express
-- TypeScript
-- Supabase (PostgreSQL)
-- Anthropic Claude API
+| Feature | Description |
+|---------|-------------|
+| 📝 **Work Logging** | Complete daily work entries in 3 minutes, supports semi-structured input |
+| 🤖 **AI Optimization** | Auto-optimize work expressions with Anthropic Claude, highlight value |
+| 📊 **Structured Analysis** | Auto task classification, time extraction, tagging, deep work detection |
+| 📈 **Weekly/Monthly Reports** | Auto-generate efficiency reports, identify time distribution and patterns |
+| 💡 **Actionable Suggestions** | Personalized data-driven recommendations to boost efficiency |
+| 🌍 **Weather Integration** | Real-time weather display, correlate efficiency with weather conditions |
+| 🔌 **Multi AI Provider** | Support 10+ AI services, including custom OpenAI-compatible endpoints |
 
-### 前端
-- React 18 + TypeScript
-- Vite
-- TailwindCSS
-- React Router
+---
 
-## 🚀 快速开始
+## 🏗️ Architecture
 
-### 方式一：Docker 部署（推荐）
+```
+┌─────────────┐     ┌─────────┐     ┌──────────────┐     ┌──────────┐
+│  Web Input  │ ──▶ │  API    │ ──▶ │  AI Layer    │ ──▶ │ Database │
+│  Interface  │     │  Server │     │  Optimize +  │     │ Storage  │
+└─────────────┘     └─────────┘     │  Structured  │     └──────────┘
+                                    └──────────────┘
+                                               │
+                                               ▼
+                                      ┌──────────────┐
+                                      │  Markdown    │
+                                      │  Dashboard   │
+                                      └──────────────┘
+```
+
+---
+
+## 🚀 Quick Start
+
+### Option 1: Docker Deployment (Recommended for Production)
 
 ```bash
-# 复制环境变量
+# 1. Clone the repository
+git clone https://github.com/your-org/RecordEvo.git
+cd RecordEvo
+
+# 2. Copy environment file
 cp .env.example .env
 
-# 编辑 .env 填入配置
+# 3. Edit .env with your credentials
 # - SUPABASE_URL
 # - SUPABASE_SERVICE_KEY
 # - ANTHROPIC_API_KEY
 
-# 启动服务
+# 4. Start services
 docker-compose up -d
 
-# 查看日志
+# 5. View logs
 docker-compose logs -f
 ```
 
-访问 http://localhost:3001
+Visit http://localhost:3001
 
-### 方式二：开发模式
-
-### 1. 环境准备
+### Option 2: Development Mode
 
 ```bash
-# 安装依赖
+# 1. Install dependencies
 npm install
 
-# 安装服务端依赖
-cd server && npm install
-
-# 安装客户端依赖
-cd ../client && npm install
-```
-
-### 2. 配置环境变量
-
-```bash
-# 复制环境变量文件
+# 2. Configure environment
 cp server/.env.example server/.env
-cp client/.env.example client/.env
+# Edit server/.env with your configuration
 
-# 编辑 server/.env 配置：
-# - SUPABASE_URL
-# - SUPABASE_SERVICE_KEY
-# - ANTHROPIC_API_KEY
-```
-
-### 3. 初始化数据库
-
-在 Supabase 控制台执行 `server/sql/init.sql`
-
-### 4. 启动开发服务器
-
-```bash
-# 根目录执行
+# 3. Start development server
 npm run dev
 ```
 
-访问 http://localhost:5173
+Visit:
+- Frontend: http://localhost:5173
+- Backend: http://localhost:3001
 
-## 📁 项目结构
+---
+
+## 📦 Tech Stack
+
+### Backend
+| Technology | Purpose |
+|------------|---------|
+| **Node.js + Express** | Web server framework |
+| **TypeScript** | Type-safe JavaScript |
+| **SQLite / Turso** | Local/Cloud database |
+| **Supabase** | PostgreSQL cloud database (optional) |
+| **Anthropic SDK** | Claude AI integration |
+| **OpenAI SDK** | Multi AI Provider compatible |
+| **node-cron** | Scheduled task management |
+| **Zod** | Runtime type validation |
+
+### Frontend
+| Technology | Purpose |
+|------------|---------|
+| **React 18** | UI framework |
+| **TypeScript** | Type safety |
+| **Vite** | Build tool |
+| **TailwindCSS** | Atomic CSS |
+| **React Router** | Route management |
+| **Recharts** | Data visualization |
+
+---
+
+## 📋 API Endpoints
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/login` | User login |
+
+### Work Records
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/records` | Get record list |
+| POST | `/api/records` | Create new record (with AI analysis) |
+| GET | `/api/records/:id` | Get single record |
+| DELETE | `/api/records/:id` | Delete record |
+
+### AI Features
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/optimize` | AI text optimization |
+| POST | `/api/analyze` | AI structured analysis |
+
+### Summary Reports
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/summaries/weekly` | Get weekly summaries |
+| POST | `/api/summaries/weekly/generate` | Generate weekly summary |
+| GET | `/api/trends/monthly` | Get monthly trends |
+| POST | `/api/trends/monthly/generate` | Generate monthly trend |
+
+### Suggestions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/suggestions` | Get optimization suggestions |
+| POST | `/api/suggestions/generate` | Generate suggestions |
+| PATCH | `/api/suggestions/:id/action` | Mark suggestion as actioned |
+
+### Settings
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/settings/ai-providers` | Get all AI Providers |
+| POST | `/api/settings/ai-providers/:provider/config` | Save Provider config |
+| POST | `/api/settings/ai-providers/:provider/activate` | Activate Provider |
+| POST | `/api/settings/ai-providers/:provider/test` | Test connection |
+| GET | `/api/settings/custom-providers` | Get custom Providers |
+| POST | `/api/settings/custom-providers` | Create custom Provider |
+| PUT | `/api/settings/custom-providers/:id` | Update custom Provider |
+| DELETE | `/api/settings/custom-providers/:id` | Delete custom Provider |
+
+---
+
+## 📁 Project Structure
 
 ```
-efficiency-tracker/
-├── client/              # 前端 React 应用
+RecordEvo/
+├── client/                 # Frontend React application
 │   ├── src/
-│   │   ├── App.tsx
-│   │   ├── api.ts
+│   │   ├── App.tsx        # Main application component
+│   │   ├── api.ts         # API client
 │   │   └── pages/
-│   │       └── Dashboard.tsx
+│   │       ├── Dashboard.tsx      # Dashboard
+│   │       ├── TaskTracker.tsx    # Task tracking
+│   │       ├── RecordsHistory.tsx # History records
+│   │       └── Settings.tsx       # Settings page
 │   ├── package.json
 │   └── vite.config.ts
-├── server/              # 后端 Express 服务
+│
+├── server/                 # Backend Express service
 │   ├── src/
-│   │   ├── routes/
+│   │   ├── index.ts       # Entry point
+│   │   ├── routes/        # API routes
 │   │   │   ├── auth.ts
 │   │   │   ├── records.ts
 │   │   │   ├── optimize.ts
 │   │   │   ├── analyze.ts
 │   │   │   ├── summaries.ts
 │   │   │   ├── trends.ts
-│   │   │   └── suggestions.ts
-│   │   ├── lib/
-│   │   │   ├── database.ts
-│   │   │   ├── ai.ts
-│   │   │   └── cron.ts
-│   │   └── index.ts
+│   │   │   ├── suggestions.ts
+│   │   │   └── settings.ts
+│   │   └── lib/           # Core libraries
+│   │       ├── ai.ts              # AI service
+│   │       ├── ai-providers.ts    # AI Provider management
+│   │       ├── config-manager.ts  # Configuration management
+│   │       ├── database.ts        # Database service
+│   │       ├── database-adapter.ts# Database adapter interface
+│   │       ├── sqlite-adapter.ts  # SQLite implementation
+│   │       ├── turso-adapter.ts   # Turso implementation
+│   │       └── cron.ts            # Scheduled tasks
 │   ├── sql/
-│   │   └── init.sql
+│   │   └── sqlite-schema.sql      # Database Schema
 │   └── package.json
-├── docker-compose.yml   # Docker 编排
-├── Dockerfile          # Docker 镜像
-├── DEPLOY.md          # 部署文档
-├── .env.example       # 环境变量示例
-└── README.md
+│
+├── scripts/                # Utility scripts
+├── docker-compose.yml      # Docker orchestration
+├── Dockerfile             # Docker image
+├── .env.example           # Environment variables example
+└── package.json           # Root project configuration
 ```
 
-## 📋 API 接口
+---
 
-### 认证
-- `POST /api/auth/login` - 用户登录
+## 🎯 Supported AI Providers
 
-### 工作记录
-- `GET /api/records` - 获取记录列表
-- `POST /api/records` - 创建新记录（含自动 AI 分析）
-- `GET /api/records/:id` - 获取单条记录
-- `DELETE /api/records/:id` - 删除记录
+### Pre-defined Providers
 
-### AI 功能
-- `POST /api/optimize` - AI 文本优化
-- `POST /api/analyze` - AI 结构化分析
+| Provider | Description |
+|----------|-------------|
+| Anthropic Claude | US AI company, Claude series models |
+| OpenAI GPT | GPT-4/ChatGPT |
+| DeepSeek | Chinese large model, cost-effective |
+| Zhipu AI | GLM series models |
+| Kimi | Moonshot AI, long-text processing |
+| NVIDIA NIM | NVIDIA GPU cloud, Llama and more |
+| vLLM | Open-source model inference framework |
+| Aliyun Bailian | Tongyi Qianwen Qwen series |
+| Volcengine | Doubao/Ark large models |
+| MiniMax | Chinese MiniMax large models |
+| OpenRouter | Aggregates multiple AI providers |
 
-### 周总结
-- `GET /api/summaries/weekly` - 获取周总结列表
-- `POST /api/summaries/weekly/generate` - 生成周总结
+### Custom Provider
 
-### 月趋势
-- `GET /api/trends/monthly` - 获取月趋势列表
-- `POST /api/trends/monthly/generate` - 生成月趋势
+Support adding any OpenAI-compatible API endpoint, just provide:
+- Provider name
+- API Key
+- API Endpoint
+- Model name
 
-### 优化建议
-- `GET /api/suggestions` - 获取优化建议
-- `POST /api/suggestions/generate` - 生成优化建议
-- `PATCH /api/suggestions/:id/action` - 标记建议为已执行
+---
 
-## 📅 开发计划
+## 🔧 Environment Variables
 
-参见 [design.md](./design.md)
+```bash
+# Required configuration
+SUPABASE_URL=your_supabase_url          # Supabase project URL
+SUPABASE_SERVICE_KEY=your_service_key   # Supabase service key
+ANTHROPIC_API_KEY=your_anthropic_key    # Anthropic API Key
 
-| 阶段 | 时间 | 内容 | 状态 |
-|------|------|------|------|
-| Phase 1 | Week 1-2 | MVP - 基础记录系统 | ✅ 完成 |
-| Phase 2 | Week 3-4 | 结构化数据抽取 | ✅ 完成 |
-| Phase 3 | Week 5-6 | 周总结 Agent | ✅ 完成 |
-| Phase 4 | Week 7-8 | 月趋势分析 | ✅ 完成 |
-| Phase 5 | Week 9-10 | Dashboard | ✅ 完成 |
-| Phase 6 | Week 11-12 | 优化建议 | ✅ 完成 |
+# Optional configuration
+PORT=3001                               # Server port
+NODE_ENV=production                     # Runtime environment
+ALLOWED_ORIGINS=http://localhost:5173   # CORS allowed origins
 
-## 📝 设计原则
+# AI Provider configuration (as needed)
+OPENAI_API_KEY=your_openai_key
+DEEPSEEK_API_KEY=your_deepseek_key
+ZHIPU_API_KEY=your_zhipu_key
+# ... more Provider configurations
 
-1. **只做自己会长期使用的功能** - 避免过度设计
-2. **结构化优先于花哨 UI** - 数据价值 > 视觉效果
-3. **AI 输出必须有决策价值** - 每个输出都要有行动指导
-4. **系统要可演进** - 分阶段迭代
+# Database mode (optional: memory | sqlite | turso)
+DATABASE_MODE=sqlite
+SQLITE_DB_PATH=./data/efficiency.db
+```
 
-## 🔒 安全注意
+---
 
-- 不要提交 `.env` 文件到版本控制
-- 生产环境使用 HTTPS
-- 定期轮换 API 密钥
+## 📅 Roadmap
+
+| Phase | Time | Content | Status |
+|-------|------|---------|--------|
+| Phase 1 | Week 1-2 | MVP - Basic recording system | ✅ Completed |
+| Phase 2 | Week 3-4 | Structured data extraction | ✅ Completed |
+| Phase 3 | Week 5-6 | Weekly Summary Agent | ✅ Completed |
+| Phase 4 | Week 7-8 | Monthly trend analysis | ✅ Completed |
+| Phase 5 | Week 9-10 | Dashboard | ✅ Completed |
+| Phase 6 | Week 11-12 | Optimization suggestions | ✅ Completed |
+| Phase 7 | Week 13+ | SQLite/Turso support | ✅ Completed |
+| Phase 8 | Week 14+ | Custom AI Provider | ✅ Completed |
+
+---
+
+## 🛡️ Security Notes
+
+- ⚠️ **Do NOT commit `.env` files to version control**
+- 🔒 **Use HTTPS in production**
+- 🔑 **Rotate API keys regularly**
+- 🚫 **Restrict CORS origins**
+
+---
+
+## 📝 Design Principles
+
+1. **Only build features you'll use long-term** - Avoid over-engineering
+2. **Structure over fancy UI** - Data value > Visual effects
+3. **AI output must have decision value** - Every output needs actionable guidance
+4. **System must be evolvable** - Iterative development in phases
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run tests
+npm test
+
+# Test coverage
+npm run test:coverage
+
+# Watch mode
+npm run test:watch
+```
+
+---
+
+## 🤝 Contributing
+
+1. Fork this repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
 
 ## 📄 License
 
-MIT
+MIT License - See [LICENSE](LICENSE) file for details
+
+---
+
+## 🙏 Acknowledgments
+
+- [Supabase](https://supabase.com/) - Database service
+- [React](https://react.dev/) - Frontend framework
+- [Express](https://expressjs.com/) - Web framework
+
+---
+
+<div align="center">
+
+**Made with ❤️ by RecordEvo Team**
+
+[⭐ Star this repo](https://github.com/your-org/RecordEvo/stargazers) | [🐛 Report Issues](https://github.com/your-org/RecordEvo/issues)
+
+</div>

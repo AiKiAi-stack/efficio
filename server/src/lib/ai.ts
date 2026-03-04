@@ -1,12 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { configManager } from './config-manager';
+import { getCustomProviderByKey } from './ai-providers';
 
 // 支持多 AI Provider 配置
 interface AIProviderConfig {
-  provider: 'anthropic' | 'openai' | 'deepseek' | 'zhipu' | 'kimi' | 'nvidia' | 'vllm' | 'aliyun' | 'volcengine' | 'minimax' | 'openrouter';
+  provider: 'anthropic' | 'openai' | 'deepseek' | 'zhipu' | 'kimi' | 'nvidia' | 'vllm' | 'aliyun' | 'volcengine' | 'minimax' | 'openrouter' | string;
   apiKey?: string;
   apiEndpoint?: string;
   model?: string;
+  isCustom?: boolean;
 }
 
 // 动态获取 Provider 配置（从 configManager 读取最新配置）
@@ -14,7 +16,20 @@ const getProviderConfig = (): AIProviderConfig => {
   const config = configManager.read();
 
   // 优先使用配置的 provider，其次使用环境变量
-  const provider = (config.AI_PROVIDER || process.env.AI_PROVIDER || 'anthropic') as AIProviderConfig['provider'];
+  const providerKey = config.AI_PROVIDER || process.env.AI_PROVIDER || 'anthropic';
+
+  // 先检查是否是自定义 Provider
+  const customProvider = getCustomProviderByKey(providerKey);
+  if (customProvider) {
+    const upperKey = customProvider.key.toUpperCase();
+    return {
+      provider: customProvider.key,
+      apiKey: config[`${upperKey}_API_KEY`] || process.env[`${upperKey}_API_KEY`],
+      apiEndpoint: config[`${upperKey}_ENDPOINT`] || customProvider.defaultEndpoint,
+      model: config[`${upperKey}_MODEL`] || customProvider.defaultModel,
+      isCustom: true
+    };
+  }
 
   const getEnv = (key: string, fallback?: string) => {
     return config[key] || process.env[key as keyof typeof process.env] || fallback;
@@ -78,7 +93,7 @@ const getProviderConfig = (): AIProviderConfig => {
     }
   };
 
-  return { provider, ...configs[provider] } as AIProviderConfig;
+  return { provider: providerKey, ...configs[providerKey] } as AIProviderConfig;
 };
 
 // 延迟初始化，在首次使用时才读取配置

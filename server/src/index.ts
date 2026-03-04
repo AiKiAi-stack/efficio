@@ -12,11 +12,18 @@ import { dailyLogsRouter } from './routes/dailyLogs';
 import { taskLogsRouter } from './routes/taskLogs';
 import { settingsRouter } from './routes/settings';
 import { initCronJobs } from './lib/cron';
+import { initializeDatabase } from './lib/database-new';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// 初始化数据库
+initializeDatabase().catch(err => {
+  console.error('数据库初始化失败:', err);
+  process.exit(1);
+});
 
 // CORS 配置
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [

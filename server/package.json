@@ -7,6 +7,10 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "db:init": "tsx src/scripts/init-db.ts",
+    "backup:create": "tsx src/scripts/backup-create.ts",
+    "backup:upload": "tsx src/scripts/backup-upload.ts",
+    "backup:download": "tsx src/scripts/backup-download.ts",
     "lint": "eslint . --ext .ts",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -14,7 +18,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
+    "@libsql/client": "^0.17.0",
     "@supabase/supabase-js": "^2.39.3",
+    "better-sqlite3": "^12.6.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
@@ -23,6 +29,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.12",
