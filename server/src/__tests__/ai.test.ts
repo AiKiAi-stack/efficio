@@ -126,8 +126,8 @@ describe('AI Module - Fallback Functions', () => {
       expect(summary).toContain('# 本周工作分析');
       expect(summary).toContain('📊 时间分布');
       expect(summary).toContain('- development: 2条记录');
-      expect(summary).toContain('- meeting: 1 条记录');
-      expect(summary).toContain('- documentation: 1 条记录');
+      expect(summary).toContain('- meeting: 1条记录');
+      expect(summary).toContain('- documentation: 1条记录');
       expect(summary).toContain('✨ 高价值工作');
       expect(summary).toContain('🎯 深度工作状态');
       expect(summary).toContain('💡 优化建议');
