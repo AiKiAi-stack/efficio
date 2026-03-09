@@ -9,7 +9,47 @@
 
 ## 快速部署
 
-### 方案一：Docker Compose（推荐）
+### 方案一：一键部署脚本（推荐，支持 VPS/本地机器）
+
+**适用场景**:
+- VPS 服务器（Ubuntu/Debian/CentOS）
+- 本地机器（macOS/Linux）
+- 无需 Docker，无需 Node.js（二进制模式）
+
+```bash
+# 下载部署脚本
+curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/RecordEvo/main/scripts/deploy.sh -o deploy.sh
+chmod +x deploy.sh
+
+# 二进制模式部署（最快，推荐 VPS 使用）
+sudo ./deploy.sh --binary
+
+# 或者：源码模式部署（需要 Node.js，适合开发环境）
+sudo ./deploy.sh --source
+
+# 或者：Docker 模式部署
+sudo ./deploy.sh --docker
+```
+
+**部署后配置**:
+```bash
+# 1. 编辑环境变量
+sudo nano /etc/efficio/.env
+
+# 2. 查看服务状态
+sudo ./deploy.sh --status
+
+# 3. 查看日志
+sudo journalctl -u efficio -f
+
+# 4. 重启服务
+sudo ./deploy.sh --restart
+
+# 5. 卸载
+sudo ./deploy.sh --uninstall
+```
+
+### 方案二：Docker Compose
 
 1. **克隆项目**
 ```bash
