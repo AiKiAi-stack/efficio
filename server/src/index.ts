@@ -13,11 +13,15 @@ import { taskLogsRouter } from './routes/taskLogs';
 import { settingsRouter } from './routes/settings';
 import { initCronJobs } from './lib/cron';
 import { initializeDatabase } from './lib/database-new';
+import open from 'open';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+
+// 从环境变量或默认值读取配置（CLI 已设置环境变量）
+const PORT = parseInt(process.env.SERVER_PORT || process.env.PORT || '3001', 10);
+const HOST = process.env.SERVER_HOST || process.env.HOST || 'localhost';
 
 // 初始化数据库
 initializeDatabase().catch(err => {
@@ -73,9 +77,20 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+app.listen(PORT, HOST, () => {
+  const baseUrl = `http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`;
+
+  console.log(`🚀 Server running on ${baseUrl}`);
+  console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`📡 Listening on ${HOST}:${PORT}`);
+
+  // 如果需要打开浏览器
+  if (process.env.OPEN_BROWSER === 'true') {
+    console.log('🌐 Opening browser...');
+    open(baseUrl).catch(() => {
+      console.log('  Unable to open browser automatically');
+    });
+  }
 
   // 初始化定时任务
   initCronJobs();
