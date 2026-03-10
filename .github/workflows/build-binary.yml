@@ -47,7 +47,7 @@ jobs:
           npm run build
 
       - name: Install pkg
-        run: npm install -g pkg@latest
+        run: npm install -g @yao-pkg/pkg@latest
 
       - name: Build binary with pkg
         env:
@@ -56,8 +56,8 @@ jobs:
           RUNNER_OS: ${{ runner.os }}
         run: |
           cd server
-          # 构建二进制 - pkg 会自动添加 .exe 扩展名在 Windows 上
-          pkg . --targets "$TARGET" --output dist/efficio-server --no-bytecode
+          # 构建二进制 - @yao-pkg/pkg 会自动添加 .exe 扩展名在 Windows 上
+          npx @yao-pkg/pkg . --targets "$TARGET" --output dist/efficio-server --no-bytecode
 
       - name: Verify binary was created
         run: |
