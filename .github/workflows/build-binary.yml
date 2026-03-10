@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd server
-          npm ci --production
+          npm ci
 
       - name: Build TypeScript
         run: |
