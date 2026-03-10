@@ -71,10 +71,18 @@ jobs:
           # Windows 构建 - 不使用 --no-bytecode (会导致源文件包含问题)
           npx @yao-pkg/pkg . --targets "$env:TARGET" --output dist/efficio-server
 
-      - name: Verify binary was created
+      - name: Verify binary was created (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
           echo "=== Checking dist directory ==="
           ls -la server/dist/
+
+      - name: Verify binary was created (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "=== Checking dist directory ==="
+          Get-ChildItem server/dist/
 
       - name: Prepare artifact (Linux/macOS)
         if: runner.os != 'Windows'
