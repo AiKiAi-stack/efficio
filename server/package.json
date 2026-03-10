@@ -57,10 +57,14 @@
     "typescript": "^5.3.3"
   },
   "pkg": {
-    "scripts": "src/**/*.ts",
+    "scripts": "src/**/*.{ts,js}",
     "assets": [
       "node_modules/**/*",
-      "dist/**/*"
+      "dist/**/*",
+      "sql/**/*"
+    ],
+    "ignore": [
+      "src/__tests__/**/*"
     ],
     "targets": [
       "node20-linux-x64",

@@ -57,7 +57,9 @@ jobs:
         run: |
           cd server
           # 构建二进制 - @yao-pkg/pkg 会自动添加 .exe 扩展名在 Windows 上
-          npx @yao-pkg/pkg . --targets "$TARGET" --output dist/efficio-server --no-bytecode
+          # 先尝试带 --no-bytecode，如果失败则不带此选项
+          npx @yao-pkg/pkg . --targets "$TARGET" --output dist/efficio-server --no-bytecode 2>&1 || \
+          npx @yao-pkg/pkg . --targets "$TARGET" --output dist/efficio-server
 
       - name: Verify binary was created
         run: |
