@@ -49,17 +49,27 @@ jobs:
       - name: Install pkg
         run: npm install -g @yao-pkg/pkg@latest
 
-      - name: Build binary with pkg
+      - name: Build binary with pkg (Linux/macOS)
+        if: runner.os != 'Windows'
         env:
           TARGET: ${{ matrix.target }}
           ARTIFACT_NAME: ${{ matrix.artifact }}
-          RUNNER_OS: ${{ runner.os }}
         run: |
           cd server
-          # 构建二进制 - @yao-pkg/pkg 会自动添加 .exe 扩展名在 Windows 上
-          # 先尝试带 --no-bytecode，如果失败则不带此选项
+          # 构建二进制 - 先尝试带 --no-bytecode，如果失败则不带此选项
           npx @yao-pkg/pkg . --targets "$TARGET" --output dist/efficio-server --no-bytecode 2>&1 || \
           npx @yao-pkg/pkg . --targets "$TARGET" --output dist/efficio-server
+
+      - name: Build binary with pkg (Windows)
+        if: runner.os == 'Windows'
+        env:
+          TARGET: ${{ matrix.target }}
+          ARTIFACT_NAME: ${{ matrix.artifact }}
+        shell: pwsh
+        run: |
+          Set-Location server
+          # Windows 构建 - 不使用 --no-bytecode (会导致源文件包含问题)
+          npx @yao-pkg/pkg . --targets "$env:TARGET" --output dist/efficio-server
 
       - name: Verify binary was created
         run: |
