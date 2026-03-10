@@ -1,3 +1,6 @@
+// API 地址配置：优先级 环境变量 > 默认值
+// 部署时通过 .env 文件设置 VITE_API_URL，例如：
+// VITE_API_URL=http://YOUR_SERVER_IP:3001/api
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export interface User {
