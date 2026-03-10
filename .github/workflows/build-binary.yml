@@ -47,7 +47,7 @@ jobs:
           npm run build
 
       - name: Install pkg
-        run: npm install -g pkg@5.8.1
+        run: npm install -g pkg@latest
 
       - name: Build binary with pkg
         env:
