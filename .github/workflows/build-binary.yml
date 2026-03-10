@@ -122,6 +122,8 @@ jobs:
     needs: build
     runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
 
     steps:
       - name: Download all artifacts
@@ -135,14 +137,17 @@ jobs:
           echo "=== Downloaded Artifacts ==="
           find ./artifacts -type f
           echo "==========================="
+          echo "Directory structure:"
+          ls -R ./artifacts
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/efficio-server-linux-x64/*.tar.gz
-            artifacts/efficio-server-macos-x64/*.tar.gz
-            artifacts/efficio-server-win-x64/*.zip
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
           generate_release_notes: true
           draft: true
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
