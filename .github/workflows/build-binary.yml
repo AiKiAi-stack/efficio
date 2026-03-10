@@ -16,17 +16,14 @@ jobs:
           - os: ubuntu-22.04
             target: node20-linux-x64
             artifact: efficio-server-linux-x64
-            ext: ""
           # macOS x64
           - os: macos-latest
             target: node20-macos-x64
             artifact: efficio-server-macos-x64
-            ext: ""
           # Windows x64
           - os: windows-latest
             target: node20-win-x64
             artifact: efficio-server-win-x64
-            ext: ".exe"
 
     steps:
       - name: Checkout code
@@ -56,10 +53,16 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           ARTIFACT_NAME: ${{ matrix.artifact }}
+          RUNNER_OS: ${{ runner.os }}
         run: |
           cd server
-          # 构建二进制
+          # 构建二进制 - pkg 会自动添加 .exe 扩展名在 Windows 上
           pkg . --targets "$TARGET" --output dist/efficio-server --no-bytecode
+
+      - name: Verify binary was created
+        run: |
+          echo "=== Checking dist directory ==="
+          ls -la server/dist/
 
       - name: Prepare artifact (Linux/macOS)
         if: runner.os != 'Windows'
@@ -68,10 +71,11 @@ jobs:
         run: |
           mkdir -p release
           cp server/dist/efficio-server release/
-          cp .env.example release/
+          cp ${{ github.workspace }}/.env.example release/
           cd release
           chmod +x efficio-server
           tar -czvf "${ARTIFACT_NAME}.tar.gz" efficio-server .env.example
+          echo "Created artifact: $(ls -la *.tar.gz)"
 
       - name: Prepare artifact (Windows)
         if: runner.os == 'Windows'
@@ -80,17 +84,19 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release
-          Copy-Item -Path server/dist/efficio-server.exe -Destination release/
-          Copy-Item -Path .env.example -Destination release/
+          # pkg 在 Windows 上会自动添加 .exe 扩展名
+          Copy-Item -Path "server/dist/efficio-server.exe" -Destination "release/efficio-server.exe"
+          Copy-Item -Path "${{ github.workspace }}/.env.example" -Destination "release/.env.example"
           Set-Location release
-          Compress-Archive -Path efficio-server.exe, .env.example -DestinationPath "${ARTIFACT_NAME}.zip" -Force
+          Compress-Archive -Path .\efficio-server.exe, .\.env.example -DestinationPath "${ARTIFACT_NAME}.zip" -Force
+          Write-Host "Created artifact: $(Get-ChildItem *.zip | Format-Table -HideTableHeaders | Out-String)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: release/*
-          retention-days: 30
+          retention-days: 60
 
   release:
     needs: build
