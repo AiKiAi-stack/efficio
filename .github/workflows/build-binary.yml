@@ -54,6 +54,11 @@ jobs:
           cd server
           npm run build
 
+      - name: Copy client dist to server directory
+        run: |
+          mkdir -p server/client
+          cp -r client/dist server/client/
+
       - name: Install pkg
         run: npm install -g @yao-pkg/pkg@latest
 

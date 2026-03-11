@@ -75,22 +75,31 @@ app.use('/api/settings', settingsRouter);
 // 生产环境：服务前端静态文件
 if (process.env.NODE_ENV === 'production') {
   const fs = require('fs');
+  const path = require('path');
 
-  // pkg 打包后，__dirname 类似于 /snapshot/project/server/dist
-  // client/dist 被打包到 /snapshot/project/client/dist
-  let clientDist: string;
-
-  // 使用 'pkg' in process 避免 TypeScript 类型错误
-  if ('pkg' in process) {
-    // pkg 环境：client/dist 被打包到 /snapshot/server/client/dist
-    clientDist = '/snapshot/server/client/dist';
-  } else {
+  // pkg 打包后，需要找到 client/dist 的正确路径
+  // pkg 环境中，process.execPath 指向 binary，__dirname 类似于 /snapshot/project/server/dist
+  // 尝试多个可能的位置
+  const possiblePaths = [
+    // pkg 环境：client/dist 被打包到 /snapshot/project/client/dist
+    '/snapshot/server/client/dist',
+    '/snapshot/efficio/client/dist',
+    // 也可能在 binary 同级目录
+    path.join(path.dirname(process.execPath), 'client', 'dist'),
     // 普通 Node 环境：相对路径
-    clientDist = path.join(__dirname, '../../client/dist');
+    path.join(__dirname, '../../client/dist'),
+    path.join(__dirname, '../client/dist'),
+  ];
+
+  let clientDist: string | null = null;
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      clientDist = p;
+      break;
+    }
   }
 
-  // 验证目录存在
-  if (fs.existsSync(clientDist)) {
+  if (clientDist) {
     app.use(express.static(clientDist, {
       index: 'index.html',
       fallthrough: false
@@ -101,7 +110,7 @@ if (process.env.NODE_ENV === 'production') {
       res.sendFile(path.join(clientDist, 'index.html'));
     });
   } else {
-    console.warn(`⚠️  Client dist directory not found: ${clientDist}`);
+    console.warn('⚠️  Client dist directory not found. Frontend will not be served.');
   }
 }
 
