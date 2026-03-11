@@ -74,18 +74,36 @@ app.use('/api/settings', settingsRouter);
 
 // 生产环境：服务前端静态文件
 if (process.env.NODE_ENV === 'production') {
-  // 计算 client/dist 的绝对路径
   // pkg 打包后，__dirname 类似于 /snapshot/project/server/dist
-  const clientDist = path.join(__dirname, '../../client/dist');
-  app.use(express.static(clientDist, {
-    index: 'index.html',
-    fallthrough: false
-  }));
+  // 需要兼容 pkg 环境和普通 Node 环境
+  const pathExists = require('path').join;
+  const fs = require('fs');
 
-  // SPA fallback - 所有非 API 请求返回 index.html
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
+  // 尝试多个可能的 client/dist 位置
+  let clientDist: string;
+
+  // 1. pkg 环境：从 snapshot 目录查找
+  if (process.pkg) {
+    clientDist = '/snapshot/efficio/client/dist';
+  } else {
+    // 2. 普通 Node 环境：相对路径
+    clientDist = path.join(__dirname, '../../client/dist');
+  }
+
+  // 验证目录存在
+  if (fs.existsSync(clientDist)) {
+    app.use(express.static(clientDist, {
+      index: 'index.html',
+      fallthrough: false
+    }));
+
+    // SPA fallback - 所有非 API 请求返回 index.html
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(clientDist, 'index.html'));
+    });
+  } else {
+    console.warn(`⚠️  Client dist directory not found: ${clientDist}`);
+  }
 }
 
 // Error handling

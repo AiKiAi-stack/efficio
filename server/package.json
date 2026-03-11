@@ -63,7 +63,8 @@
     "assets": [
       "node_modules/**/*",
       "dist/**/*",
-      "sql/**/*"
+      "sql/**/*",
+      "../client/dist/**/*"
     ],
     "ignore": [
       "src/__tests__/**/*"
