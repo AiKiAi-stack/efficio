@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import { recordsRouter } from './routes/records';
 import { authRouter } from './routes/auth';
 import { optimizeRouter } from './routes/optimize';
@@ -70,6 +71,22 @@ app.use('/api/suggestions', suggestionsRouter);
 app.use('/api/daily-logs', dailyLogsRouter);
 app.use('/api/task-logs', taskLogsRouter);
 app.use('/api/settings', settingsRouter);
+
+// 生产环境：服务前端静态文件
+if (process.env.NODE_ENV === 'production') {
+  // 计算 client/dist 的绝对路径
+  // pkg 打包后，__dirname 类似于 /snapshot/project/server/dist
+  const clientDist = path.join(__dirname, '../../client/dist');
+  app.use(express.static(clientDist, {
+    index: 'index.html',
+    fallthrough: false
+  }));
+
+  // SPA fallback - 所有非 API 请求返回 index.html
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 // Error handling
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
