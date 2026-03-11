@@ -64,7 +64,8 @@
       "node_modules/**/*",
       "dist/**/*",
       "sql/**/*",
-      "../client/dist/**/*"
+      "../client/dist/*",
+      "../client/dist/assets/**/*"
     ],
     "ignore": [
       "src/__tests__/**/*"

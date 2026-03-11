@@ -74,17 +74,16 @@ app.use('/api/settings', settingsRouter);
 
 // 生产环境：服务前端静态文件
 if (process.env.NODE_ENV === 'production') {
-  // pkg 打包后，__dirname 类似于 /snapshot/project/server/dist
-  // 需要兼容 pkg 环境和普通 Node 环境
   const fs = require('fs');
 
-  // 尝试多个可能的 client/dist 位置
+  // pkg 打包后，__dirname 类似于 /snapshot/project/server/dist
+  // client/dist 被打包到 /snapshot/project/client/dist
   let clientDist: string;
 
-  // pkg 环境：从 snapshot 目录查找
   // 使用 'pkg' in process 避免 TypeScript 类型错误
   if ('pkg' in process) {
-    clientDist = '/snapshot/efficio/client/dist';
+    // pkg 环境：client/dist 被打包到 /snapshot/server/client/dist
+    clientDist = '/snapshot/server/client/dist';
   } else {
     // 普通 Node 环境：相对路径
     clientDist = path.join(__dirname, '../../client/dist');

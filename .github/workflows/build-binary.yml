@@ -43,6 +43,12 @@ jobs:
           cd server
           npm ci
 
+      - name: Build frontend
+        run: |
+          cd client
+          npm ci
+          npm run build
+
       - name: Build TypeScript
         run: |
           cd server
