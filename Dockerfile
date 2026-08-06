@@ -1,47 +1,63 @@
-# 多阶段构建 - 优化镜像大小
+# syntax=docker/dockerfile:1
+# 多阶段构建：源码构建阶段 + 生产运行阶段
+# 使用 npm（与本地开发 / GitHub CI 一致）。仓库没有 pnpm-lock.yaml，
+# 原 pnpm 方案会导致构建失败，故移除。
+# 构建阶段安装了编译工具链，确保 better-sqlite3 在无法下载预编译二进制
+# （GitHub 被墙）时能本地编译，构建不依赖外网可达性。
+
+# ---------- 构建阶段 ----------
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# 安装 pnpm（更节省空间）
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# 国内网络加速（如需官方源可注释掉）
+ENV npm_config_registry=https://registry.npmmirror.com
+# better-sqlite3 预编译二进制走 npmmirror 镜像（下载失败会自动回退到本地编译）
+ENV npm_config_better_sqlite3_binary_host_mirror=https://registry.npmmirror.com/-/binary/better-sqlite3
 
-# 复制 package.json
-COPY package.json ./
-COPY server/package.json ./server/
-COPY client/package.json ./client/
+# 编译工具链：better-sqlite3 等原生模块在无预编译产物时需要 node-gyp 编译
+# apk 使用阿里云镜像（官方源 dl-cdn.alpinelinux.org 在国内慢/不通）
+RUN sed -i 's|https://dl-cdn.alpinelinux.org|https://mirrors.aliyun.com|g' /etc/apk/repositories \
+ && apk add --no-cache python3 make g++
 
-# 安装依赖
-RUN pnpm install --frozen-lockfile || pnpm install
+# 先复制依赖清单，充分利用 Docker 层缓存
+COPY package.json package-lock.json ./
+COPY server/package.json server/package-lock.json ./server/
+COPY client/package.json client/package-lock.json ./client/
 
-# 复制源码
+# 安装三个子项目的依赖
+RUN npm ci --no-audit --no-fund \
+ && cd server && npm ci --no-audit --no-fund \
+ && cd ../client && npm ci --no-audit --no-fund
+
+# 复制源码（.dockerignore 已排除 node_modules/dist/.env/data）
 COPY server ./server
 COPY client ./client
 
-# 构建服务端
-WORKDIR /app/server
-RUN pnpm build
+# 构建服务端和前端
+RUN cd server && npm run build \
+ && cd ../client && npm run build
 
-# 构建客户端
-WORKDIR /app/client
-RUN pnpm build
+# 移除开发依赖，缩小运行镜像体积
+RUN cd server && npm prune --omit=dev --no-audit --no-fund
 
-# 生产阶段
+# ---------- 生产阶段 ----------
 FROM node:20-alpine
 
 WORKDIR /app
 
-# 安装 pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+ENV NODE_ENV=production
+# 单线程运行，节省内存
+ENV NODE_OPTIONS="--max-old-space-size=256"
 
-# 只复制生产依赖
-COPY package.json ./
-COPY server/package.json ./server/
-COPY server/dist ./server/dist
-COPY server/node_modules ./server/node_modules
+# SQLite 数据目录（docker-compose 将卷挂载到 /app/data）
+RUN mkdir -p /app/data
 
-# 复制构建好的客户端
-COPY client/dist ./client/dist
+# 复制构建产物与生产依赖（依赖从构建阶段带过来，避免运行阶段二次编译原生模块）
+COPY --from=builder /app/server/dist ./server/dist
+COPY --from=builder /app/server/node_modules ./server/node_modules
+COPY --from=builder /app/server/sql ./server/sql
+COPY --from=builder /app/client/dist ./client/dist
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
@@ -49,9 +65,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 EXPOSE 3001
 
-ENV NODE_ENV=production
-
-# 单线程运行，节省内存
-ENV NODE_OPTIONS="--max-old-space-size=256"
-
-CMD ["sh", "-c", "cd server && node dist/index.js"]
+CMD ["node", "server/dist/cli.js"]
