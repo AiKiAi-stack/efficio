@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { supabase, isMemoryMode } from '../lib/database';
+import { getDatabase } from '../lib/database-new';
 import {
   isAiAvailable,
   generateAIResponse,
@@ -26,16 +26,15 @@ summariesRouter.get('/weekly', async (req, res) => {
       });
     }
 
+    const db = getDatabase();
+
     // 如果指定了 week_start，获取特定周的总结
     if (week_start) {
-      const { data, error } = await supabase
-        .from('weekly_summaries')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('week_start', week_start)
-        .single();
+      const { data, error } = await db.selectSingle('weekly_summaries', {
+        where: { user_id: userId, week_start: week_start as string }
+      });
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) throw error;
 
       res.json({
         success: true,
@@ -45,11 +44,10 @@ summariesRouter.get('/weekly', async (req, res) => {
     }
 
     // 否则获取所有周的总结
-    const { data, error } = await supabase
-      .from('weekly_summaries')
-      .select('*')
-      .eq('user_id', userId)
-      .order('week_start', { ascending: false });
+    const { data, error } = await db.select('weekly_summaries', {
+      where: { user_id: userId },
+      orderBy: { column: 'week_start', direction: 'DESC' }
+    });
 
     if (error) throw error;
 
@@ -86,14 +84,16 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
       });
     }
 
+    const db = getDatabase();
+
     // 获取该周的所有记录
-    const { data: records, error: recordsError } = await supabase
-      .from('work_records')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('created_at', week_start)
-      .lt('created_at', week_end)
-      .order('created_at', { ascending: true });
+    const { data: records, error: recordsError } = await db.select('work_records', {
+      where: {
+        user_id: userId,
+        created_at: { gte: week_start, lt: week_end }
+      },
+      orderBy: { column: 'created_at', direction: 'ASC' }
+    });
 
     if (recordsError) throw recordsError;
 
@@ -173,56 +173,29 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
     };
 
     // 保存到数据库
+    const { data: existingSummary } = await db.selectSingle('weekly_summaries', {
+      where: { user_id: userId, week_start }
+    });
+
     let savedSummary;
 
-    if (isMemoryMode) {
-      // 内存模式：简化处理，直接返回
-      savedSummary = {
-        id: Math.random().toString(36).substring(2),
+    if (existingSummary) {
+      const { data, error } = await db.update('weekly_summaries', existingSummary.id, {
+        summary_data: summaryData,
+        markdown_content: markdownContent
+      });
+      if (error) throw error;
+      savedSummary = data;
+    } else {
+      const { data, error } = await db.insert('weekly_summaries', {
         user_id: userId,
         week_start,
         week_end,
         summary_data: summaryData,
-        markdown_content: markdownContent,
-        created_at: new Date().toISOString()
-      };
-    } else {
-      const { data: existingSummary } = await supabase
-        .from('weekly_summaries')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('week_start', week_start)
-        .single();
-
-      if (existingSummary) {
-        const { data, error } = await supabase
-          .from('weekly_summaries')
-          .update({
-            summary_data: summaryData,
-            markdown_content: markdownContent
-          })
-          .eq('id', existingSummary.id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        savedSummary = data;
-      } else {
-        const { data, error } = await supabase
-          .from('weekly_summaries')
-          .insert([{
-            user_id: userId,
-            week_start,
-            week_end,
-            summary_data: summaryData,
-            markdown_content: markdownContent
-          }])
-          .select()
-          .single();
-
-        if (error) throw error;
-        savedSummary = data;
-      }
+        markdown_content: markdownContent
+      });
+      if (error) throw error;
+      savedSummary = data;
     }
 
     res.json({
@@ -270,22 +243,18 @@ summariesRouter.post('/range', async (req, res) => {
       });
     }
 
+    const db = getDatabase();
+
     // 获取该时间段的所有记录
     const [recordsRes, taskLogsRes] = await Promise.all([
-      supabase
-        .from('work_records')
-        .select('*')
-        .eq('user_id', userId)
-        .gte('created_at', startDate)
-        .lte('created_at', endDate)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('task_logs')
-        .select('*')
-        .eq('user_id', userId)
-        .gte('created_at', startDate)
-        .lte('created_at', endDate)
-        .order('created_at', { ascending: true })
+      db.select('work_records', {
+        where: { user_id: userId, created_at: { gte: startDate, lte: endDate } },
+        orderBy: { column: 'created_at', direction: 'ASC' }
+      }),
+      db.select('task_logs', {
+        where: { user_id: userId, created_at: { gte: startDate, lte: endDate } },
+        orderBy: { column: 'created_at', direction: 'ASC' }
+      })
     ]);
 
     const records = recordsRes.data || [];
@@ -490,20 +459,16 @@ summariesRouter.post('/insights', async (req, res) => {
       });
     }
 
+    const db = getDatabase();
+
     // 获取记录
     const [recordsRes, taskLogsRes] = await Promise.all([
-      supabase
-        .from('work_records')
-        .select('*')
-        .eq('user_id', userId)
-        .gte('created_at', start_date)
-        .lte('created_at', end_date + 'T23:59:59.999Z'),
-      supabase
-        .from('task_logs')
-        .select('*')
-        .eq('user_id', userId)
-        .gte('created_at', start_date)
-        .lte('created_at', end_date + 'T23:59:59.999Z')
+      db.select('work_records', {
+        where: { user_id: userId, created_at: { gte: start_date, lte: end_date + 'T23:59:59.999Z' } }
+      }),
+      db.select('task_logs', {
+        where: { user_id: userId, created_at: { gte: start_date, lte: end_date + 'T23:59:59.999Z' } }
+      })
     ]);
 
     const records = recordsRes.data || [];

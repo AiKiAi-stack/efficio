@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { supabase } from './database';
+import { getDatabase } from './database-new';
 
 /**
  * 定时任务服务
@@ -14,10 +14,10 @@ export const weeklySummaryJob = cron.schedule('0 8 * * 1', async () => {
   console.log('[Cron] 运行周总结生成任务...');
 
   try {
+    const db = getDatabase();
+
     // 获取所有用户
-    const { data: users } = await supabase
-      .from('users')
-      .select('id');
+    const { data: users } = await db.select('users', {});
 
     if (!users || users.length === 0) {
       console.log('[Cron] 无用户，跳过');
@@ -37,12 +37,9 @@ export const weeklySummaryJob = cron.schedule('0 8 * * 1', async () => {
     for (const user of users) {
       try {
         // 检查是否已存在该周总结
-        const { data: existing } = await supabase
-          .from('weekly_summaries')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('week_start', weekStart)
-          .single();
+        const { data: existing } = await db.selectSingle('weekly_summaries', {
+          where: { user_id: user.id, week_start: weekStart }
+        });
 
         if (existing) {
           console.log(`[Cron] 用户 ${user.id} 本周总结已存在，跳过`);
@@ -50,13 +47,13 @@ export const weeklySummaryJob = cron.schedule('0 8 * * 1', async () => {
         }
 
         // 检查该周是否有记录
-        const { data: records } = await supabase
-          .from('work_records')
-          .select('id')
-          .eq('user_id', user.id)
-          .gte('created_at', weekStart)
-          .lt('created_at', weekEnd)
-          .limit(1);
+        const { data: records } = await db.select('work_records', {
+          where: {
+            user_id: user.id,
+            created_at: { gte: weekStart, lt: weekEnd }
+          },
+          limit: 1
+        });
 
         if (!records || records.length === 0) {
           console.log(`[Cron] 用户 ${user.id} 该周无记录，跳过`);
@@ -87,9 +84,9 @@ export const monthlyTrendJob = cron.schedule('0 9 1 * *', async () => {
   console.log('[Cron] 运行月趋势生成任务...');
 
   try {
-    const { data: users } = await supabase
-      .from('users')
-      .select('id');
+    const db = getDatabase();
+
+    const { data: users } = await db.select('users', {});
 
     if (!users || users.length === 0) {
       console.log('[Cron] 无用户，跳过');
@@ -103,13 +100,9 @@ export const monthlyTrendJob = cron.schedule('0 9 1 * *', async () => {
 
     for (const user of users) {
       try {
-        const { data: existing } = await supabase
-          .from('monthly_trends')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('year', year)
-          .eq('month', lastMonth + 1) // 数据库存储 1-12
-          .single();
+        const { data: existing } = await db.selectSingle('monthly_trends', {
+          where: { user_id: user.id, year, month: lastMonth + 1 } // 数据库存储 1-12
+        });
 
         if (existing) {
           console.log(`[Cron] 用户 ${user.id} 该月趋势已存在，跳过`);

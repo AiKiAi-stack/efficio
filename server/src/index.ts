@@ -24,11 +24,8 @@ const PORT = parseInt(process.env.SERVER_PORT || process.env.PORT || '3001', 10)
 const HOST = process.env.SERVER_HOST || process.env.HOST || 'localhost';
 const LOG_LEVEL = (process.env.LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error') || 'info';
 
-// 初始化数据库
-initializeDatabase().catch(err => {
-  console.error('Database initialization failed:', err);
-  process.exit(1);
-});
+// 初始化数据库（在 HTTP 服务启动前完成，失败则快速退出）
+// 见文件底部 app.listen 处的初始化调用
 
 // CORS 配置
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').filter(Boolean) || [
@@ -125,7 +122,8 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-app.listen(PORT, HOST, () => {
+initializeDatabase().then(() => {
+  app.listen(PORT, HOST, () => {
   const displayHost = HOST === '0.0.0.0' ? 'localhost' : HOST;
   const baseUrl = `http://${displayHost}:${PORT}`;
 
@@ -152,4 +150,8 @@ app.listen(PORT, HOST, () => {
   } else {
     console.log('⏰ Cron jobs disabled');
   }
+  });
+}).catch(err => {
+  console.error('Database initialization failed:', err);
+  process.exit(1);
 });

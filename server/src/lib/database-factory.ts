@@ -7,7 +7,8 @@
 import { IDatabaseAdapter } from './database-adapter';
 import { SQLiteAdapter } from './sqlite-adapter';
 import { TursoAdapter } from './turso-adapter';
-import { createInMemoryDatabase } from './database';
+import { InMemoryAdapter } from './in-memory-adapter';
+import { SupabaseAdapter } from './supabase-adapter';
 
 /**
  * 数据库配置
@@ -32,10 +33,9 @@ export function createDatabaseAdapter(config?: DatabaseFactoryConfig): IDatabase
 
   switch (mode) {
     case 'sqlite': {
-      const adapter = new SQLiteAdapter({
+      return new SQLiteAdapter({
         dbPath: config?.sqlitePath || process.env.SQLITE_DB_PATH || './data/efficiency.db'
       });
-      return adapter as any as IDatabaseAdapter;
     }
 
     case 'turso': {
@@ -47,15 +47,13 @@ export function createDatabaseAdapter(config?: DatabaseFactoryConfig): IDatabase
         return createDatabaseAdapter({ mode: 'sqlite' });
       }
 
-      const adapter = new TursoAdapter({
+      return new TursoAdapter({
         url: tursoUrl,
         authToken: tursoToken
       });
-      return adapter as any as IDatabaseAdapter;
     }
 
     case 'supabase': {
-      // Supabase 配置缺失时降级到 SQLite
       const supabaseUrl = process.env.SUPABASE_URL;
       const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 
@@ -64,15 +62,15 @@ export function createDatabaseAdapter(config?: DatabaseFactoryConfig): IDatabase
         return createDatabaseAdapter({ mode: 'sqlite' });
       }
 
-      // 使用现有的 Supabase 实现
-      return createInMemoryDatabase() as any as IDatabaseAdapter;
+      return new SupabaseAdapter({
+        url: supabaseUrl,
+        serviceKey: supabaseKey
+      });
     }
 
     case 'memory':
     default: {
-      // 内存模式（降级模式）
-      console.warn('⚠️ 使用内存模式，重启后数据会丢失');
-      return createInMemoryDatabase() as any as IDatabaseAdapter;
+      return new InMemoryAdapter();
     }
   }
 }

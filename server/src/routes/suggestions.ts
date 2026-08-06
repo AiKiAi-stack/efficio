@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { supabase, isMemoryMode } from '../lib/database';
+import { getDatabase } from '../lib/database-new';
 import { generateAIResponse, isAiAvailable, generateSuggestionsWithoutAI } from '../lib/ai';
 
 export const suggestionsRouter = Router();
@@ -17,17 +17,11 @@ suggestionsRouter.get('/', async (req, res) => {
       });
     }
 
-    let query = supabase
-      .from('optimization_suggestions')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (type) {
-      query = query.eq('suggestion_type', type as string);
-    }
-
-    const { data, error } = await query;
+    const db = getDatabase();
+    const { data, error } = await db.select('optimization_suggestions', {
+      where: type ? { user_id: userId, suggestion_type: type as string } : { user_id: userId },
+      orderBy: { column: 'created_at', direction: 'DESC' }
+    });
 
     if (error) throw error;
 
@@ -57,13 +51,14 @@ suggestionsRouter.post('/generate', async (req, res) => {
       });
     }
 
+    const db = getDatabase();
+
     // 获取用户的所有记录用于分析
-    const { data: records } = await supabase
-      .from('work_records')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(50);
+    const { data: records } = await db.select('work_records', {
+      where: { user_id: userId },
+      orderBy: { column: 'created_at', direction: 'DESC' },
+      limit: 50
+    });
 
     if (!records || records.length === 0) {
       return res.status(404).json({
@@ -73,12 +68,11 @@ suggestionsRouter.post('/generate', async (req, res) => {
     }
 
     // 获取最近的周总结
-    const { data: recentSummaries } = await supabase
-      .from('weekly_summaries')
-      .select('markdown_content, summary_data')
-      .eq('user_id', userId)
-      .order('week_start', { ascending: false })
-      .limit(4);
+    const { data: recentSummaries } = await db.select('weekly_summaries', {
+      where: { user_id: userId },
+      orderBy: { column: 'week_start', direction: 'DESC' },
+      limit: 4
+    });
 
     let suggestionData;
 
@@ -148,17 +142,16 @@ ${recentSummaries.map(s => s.markdown_content).join('\n\n')}` : ''}`,
     }
 
     // 保存建议到数据库
-    if (!isMemoryMode && suggestionData.suggestions) {
+    if (suggestionData.suggestions) {
       const suggestionsToInsert = (suggestionData.suggestions || []).map((s: any) => ({
         user_id: userId,
         suggestion_type: type || 'pattern',
         suggestion_data: s
       }));
 
-      if (suggestionsToInsert.length > 0) {
-        await supabase
-          .from('optimization_suggestions')
-          .insert(suggestionsToInsert);
+      for (const suggestion of suggestionsToInsert) {
+        const result = await db.insert('optimization_suggestions', suggestion);
+        if (result.error) throw result.error;
       }
     }
 
@@ -180,14 +173,10 @@ suggestionsRouter.patch('/:id/action', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await supabase
-      .from('optimization_suggestions')
-      .update({ is_actioned: true })
-      .eq('id', id) as any;
+    const db = getDatabase();
+    const result = await db.update('optimization_suggestions', id, { is_actioned: true });
 
-    const error = result.error;
-
-    if (error) throw error;
+    if (result.error) throw result.error;
 
     res.json({
       success: true,
