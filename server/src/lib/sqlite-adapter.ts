@@ -64,6 +64,9 @@ export class SQLiteAdapter implements IDatabaseAdapter {
       // 执行 Schema
       (this.db as any).exec(getSqliteSchema());
 
+      // 存量库迁移：老库的 work_records 没有 jira_key 列
+      this.migrateIfNeeded();
+
       console.log(`✅ SQLite 数据库已初始化：${this.config.dbPath}`);
     } catch (error) {
       console.error('SQLite 初始化失败:', error);
@@ -265,6 +268,33 @@ export class SQLiteAdapter implements IDatabaseAdapter {
   }
 
   // ==================== 私有辅助 ====================
+
+  /**
+   * 存量库列迁移（CREATE TABLE IF NOT EXISTS 不会给已有表加列）
+   */
+  private migrateIfNeeded(): void {
+    if (!this.db) return;
+
+    const migrations: Array<{ table: string; column: string; ddl: string }> = [
+      {
+        table: 'work_records',
+        column: 'jira_key',
+        ddl: 'ALTER TABLE work_records ADD COLUMN jira_key TEXT'
+      }
+    ];
+
+    for (const migration of migrations) {
+      try {
+        const columns = (this.db as any).pragma(`table_info(${migration.table})`) as any[];
+        if (!columns.some((c: any) => c.name === migration.column)) {
+          (this.db as any).exec(migration.ddl);
+          console.log(`✅ 数据库迁移：${migration.table}.${migration.column} 已添加`);
+        }
+      } catch (error) {
+        console.warn(`数据库迁移跳过 ${migration.table}.${migration.column}:`, error);
+      }
+    }
+  }
 
   /**
    * 序列化值：对象/数组转为 JSON 字符串（SQLite 只有 TEXT 列存储 JSON 列）
