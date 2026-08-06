@@ -55,21 +55,21 @@ export interface IDatabaseAdapter {
    * @param table 表名
    * @param options 查询选项
    */
-  select<T>(table: string, options?: QueryOptions): Promise<QueryResult<T>>;
+  select<T = any>(table: string, options?: QueryOptions): Promise<QueryResult<T>>;
 
   /**
    * 查询单条记录
    * @param table 表名
    * @param options 查询选项
    */
-  selectSingle<T>(table: string, options?: QueryOptions): Promise<SingleResult<T>>;
+  selectSingle<T = any>(table: string, options?: QueryOptions): Promise<SingleResult<T>>;
 
   /**
    * 插入记录
    * @param table 表名
    * @param data 数据对象
    */
-  insert<T>(table: string, data: Record<string, any>): Promise<SingleResult<T>>;
+  insert<T = any>(table: string, data: Record<string, any>): Promise<SingleResult<T>>;
 
   /**
    * 更新记录
@@ -77,21 +77,21 @@ export interface IDatabaseAdapter {
    * @param id 记录 ID
    * @param data 更新数据
    */
-  update<T>(table: string, id: string, data: Record<string, any>): Promise<SingleResult<T>>;
+  update<T = any>(table: string, id: string, data: Record<string, any>): Promise<SingleResult<T>>;
 
   /**
    * 删除记录
    * @param table 表名
    * @param id 记录 ID
    */
-  delete<T>(table: string, id: string): Promise<{ success: boolean; error: Error | null }>;
+  delete<T = any>(table: string, id: string): Promise<{ success: boolean; error: Error | null }>;
 
   /**
    * 执行原生 SQL 查询
    * @param sql SQL 语句
    * @param params 参数数组
    */
-  query<T>(sql: string, params?: any[]): Promise<QueryResult<T>>;
+  query<T = any>(sql: string, params?: any[]): Promise<QueryResult<T>>;
 
   /**
    * 关闭数据库连接

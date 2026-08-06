@@ -1,12 +1,13 @@
 /**
  * 数据库统一导出模块
  *
- * 为了兼容现有代码，同时支持新的数据库工厂模式
+ * 所有业务路由通过 getDatabase() 获取数据库适配器。
+ * 默认 SQLite 持久化；DATABASE_MODE=memory 时使用内存适配器（测试场景）。
  */
 
 import { createDatabaseAdapter, getDatabaseMode } from './database-factory';
 import { IDatabaseAdapter } from './database-adapter';
-import { supabase, isMemoryMode, createInMemoryDatabase, inMemoryStore } from './database';
+import { InMemoryAdapter } from './in-memory-adapter';
 
 /**
  * 当前数据库适配器实例
@@ -17,33 +18,21 @@ export let dbAdapter: IDatabaseAdapter | null = null;
  * 初始化数据库
  */
 export async function initializeDatabase(): Promise<void> {
-  const mode = getDatabaseMode();
-
-  if (mode === 'sqlite' || mode === 'turso') {
-    // 使用新的适配器模式
-    dbAdapter = createDatabaseAdapter();
-    await dbAdapter.initialize();
-    console.log(`✅ 数据库已初始化：${dbAdapter.name}`);
-  } else {
-    // 使用现有的内存/Supabase 模式
-    dbAdapter = null;
-    console.log(`✅ 数据库模式：${mode}`);
-  }
+  dbAdapter = createDatabaseAdapter();
+  await dbAdapter.initialize();
+  console.log(`✅ 数据库已初始化：${dbAdapter.name}`);
 }
 
 /**
  * 获取数据库适配器
- * 如果未初始化，返回内存适配器
+ * 如果未初始化，惰性创建内存适配器（测试环境直接挂载路由时使用）
  */
 export function getDatabase(): IDatabaseAdapter {
   if (!dbAdapter) {
-    dbAdapter = createInMemoryDatabase() as any as IDatabaseAdapter;
+    dbAdapter = new InMemoryAdapter();
   }
   return dbAdapter;
 }
-
-// 导出原有兼容 API
-export { supabase, isMemoryMode, createInMemoryDatabase, inMemoryStore };
 
 // 导出工厂函数
 export { createDatabaseAdapter, getDatabaseMode };
@@ -52,3 +41,5 @@ export { createDatabaseAdapter, getDatabaseMode };
 export { IDatabaseAdapter, QueryOptions, QueryResult, SingleResult } from './database-adapter';
 export { SQLiteAdapter } from './sqlite-adapter';
 export { TursoAdapter } from './turso-adapter';
+export { InMemoryAdapter, resetInMemoryStore } from './in-memory-adapter';
+export { SupabaseAdapter } from './supabase-adapter';

@@ -7,6 +7,7 @@
 import Database from 'better-sqlite3';
 type DatabaseType = Database.Database;
 
+import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
 import {
@@ -82,12 +83,19 @@ export class SQLiteAdapter implements IDatabaseAdapter {
       let sql = `SELECT * FROM ${table}`;
       const params: any[] = [];
 
-      // WHERE 条件
+      // WHERE 条件（支持 { eq, gt, gte, lt, lte } 操作符对象）
       if (options?.where) {
         const whereClauses: string[] = [];
+        const opMap: Record<string, string> = { eq: '=', gt: '>', gte: '>=', lt: '<', lte: '<=' };
         for (const [key, value] of Object.entries(options.where)) {
           if (value === null) {
             whereClauses.push(`${key} IS NULL`);
+          } else if (typeof value === 'object' && !Array.isArray(value)) {
+            for (const [op, v] of Object.entries(value as Record<string, any>)) {
+              const sqlOp = opMap[op] || '=';
+              whereClauses.push(`${key} ${sqlOp} ?`);
+              params.push(v);
+            }
           } else {
             whereClauses.push(`${key} = ?`);
             params.push(value);
@@ -116,7 +124,7 @@ export class SQLiteAdapter implements IDatabaseAdapter {
       }
 
       const stmt = (this.db as any).prepare(sql);
-      const data = stmt.all(...params) as T[];
+      const data = (stmt.all(...params) as any[]).map(row => this.deserializeRow(row)) as T[];
 
       return { data, error: null };
     } catch (error) {
@@ -149,9 +157,13 @@ export class SQLiteAdapter implements IDatabaseAdapter {
         return { data: null, error: new Error('数据库未连接') };
       }
 
-      const columns = Object.keys(data);
+      const row = { ...data } as Record<string, any>;
+      if (!row.id) row.id = crypto.randomUUID();
+      if (!row.created_at) row.created_at = new Date().toISOString();
+
+      const columns = Object.keys(row);
       const values = columns.map(() => '?');
-      const params = columns.map(key => data[key]);
+      const params = columns.map(key => this.serializeValue(row[key]));
 
       const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${values.join(', ')})`;
 
@@ -162,8 +174,8 @@ export class SQLiteAdapter implements IDatabaseAdapter {
       const lastId = result.lastInsertRowid;
       if (lastId) {
         const selectStmt = (this.db as any).prepare(`SELECT * FROM ${table} WHERE rowid = ?`);
-        const inserted = selectStmt.get(lastId) as T;
-        return { data: inserted, error: null };
+        const inserted = selectStmt.get(lastId);
+        return { data: this.deserializeRow(inserted) as T, error: null };
       }
 
       return { data: null, error: new Error('无法获取插入的记录') };
@@ -184,7 +196,7 @@ export class SQLiteAdapter implements IDatabaseAdapter {
 
       const columns = Object.keys(data);
       const setClause = columns.map(key => `${key} = ?`).join(', ');
-      const params = [...columns.map(key => data[key]), id];
+      const params = [...columns.map(key => this.serializeValue(data[key])), id];
 
       const sql = `UPDATE ${table} SET ${setClause} WHERE id = ?`;
 
@@ -193,9 +205,9 @@ export class SQLiteAdapter implements IDatabaseAdapter {
 
       // 返回更新后的记录
       const selectStmt = (this.db as any).prepare(`SELECT * FROM ${table} WHERE id = ?`);
-      const updated = selectStmt.get(id) as T;
+      const updated = selectStmt.get(id);
 
-      return { data: updated, error: null };
+      return { data: this.deserializeRow(updated) as T, error: null };
     } catch (error) {
       console.error('SQLite update error:', error);
       return { data: null, error: error as Error };
@@ -250,5 +262,43 @@ export class SQLiteAdapter implements IDatabaseAdapter {
       this.db = null;
       console.log('SQLite 数据库已关闭');
     }
+  }
+
+  // ==================== 私有辅助 ====================
+
+  /**
+   * 序列化值：对象/数组转为 JSON 字符串（SQLite 只有 TEXT 列存储 JSON 列）
+   */
+  private serializeValue(value: any): any {
+    if (value !== null && typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+    return value;
+  }
+
+  /**
+   * 反序列化值：形如 JSON 的字符串尝试解析（{ 或 [ 开头）
+   */
+  private deserializeValue(value: any): any {
+    if (typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))) {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+
+  /**
+   * 反序列化整行记录
+   */
+  private deserializeRow(row: any): any {
+    if (!row) return row;
+    const out: Record<string, any> = {};
+    for (const [key, value] of Object.entries(row)) {
+      out[key] = this.deserializeValue(value);
+    }
+    return out;
   }
 }

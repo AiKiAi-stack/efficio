@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { supabase, isMemoryMode, inMemoryStore } from '../lib/database';
+import { getDatabase } from '../lib/database-new';
 
 export const dailyLogsRouter = Router();
 
@@ -13,21 +13,12 @@ dailyLogsRouter.get('/today', async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    if (isMemoryMode) {
-      const log = inMemoryStore.daily_logs?.find(
-        (l: any) => l.user_id === userId && l.log_date === today
-      );
-      return res.json({ success: true, data: log || null });
-    }
+    const db = getDatabase();
+    const { data, error } = await db.selectSingle('daily_logs', {
+      where: { user_id: userId, log_date: today }
+    });
 
-    const { data, error } = await supabase
-      .from('daily_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('log_date', today)
-      .single();
-
-    if (error && error.code !== 'PGRST116') throw error;
+    if (error) throw error;
 
     res.json({ success: true, data: data || null });
   } catch (error) {
@@ -57,7 +48,7 @@ dailyLogsRouter.post('/', async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    const logData = {
+    const logData: Record<string, any> = {
       user_id: userId,
       log_date: today,
       goals: goals || null,
@@ -74,52 +65,21 @@ dailyLogsRouter.post('/', async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
-    if (isMemoryMode) {
-      if (!inMemoryStore.daily_logs) {
-        inMemoryStore.daily_logs = [];
-      }
-      const store = inMemoryStore.daily_logs as any[];
-      const existingIdx = store.findIndex(
-        (l: any) => l.user_id === userId && l.log_date === today
-      );
-
-      if (existingIdx >= 0) {
-        Object.assign(store[existingIdx], logData);
-        return res.json({ success: true, data: store[existingIdx] });
-      } else {
-        const newLog = { ...logData, id: Math.random().toString(36).substring(2) };
-        store.push(newLog);
-        return res.json({ success: true, data: newLog });
-      }
-    }
+    const db = getDatabase();
 
     // 检查是否已存在
-    const { data: existing } = await supabase
-      .from('daily_logs')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('log_date', today)
-      .single();
+    const { data: existing } = await db.selectSingle('daily_logs', {
+      where: { user_id: userId, log_date: today }
+    });
 
     let savedLog;
 
     if (existing) {
-      const { data, error } = await supabase
-        .from('daily_logs')
-        .update(logData)
-        .eq('id', existing.id)
-        .select()
-        .single();
-
+      const { data, error } = await db.update('daily_logs', existing.id, logData);
       if (error) throw error;
       savedLog = data;
     } else {
-      const { data, error } = await supabase
-        .from('daily_logs')
-        .insert([logData])
-        .select()
-        .single();
-
+      const { data, error } = await db.insert('daily_logs', logData);
       if (error) throw error;
       savedLog = data;
     }
@@ -135,35 +95,20 @@ dailyLogsRouter.post('/', async (req, res) => {
 dailyLogsRouter.get('/history', async (req, res) => {
   try {
     const userId = req.headers['x-user-id'] as string;
-    const { days } = req.query;
     if (!userId) {
       return res.status(401).json({ success: false, error: '未授权' });
     }
 
-    if (isMemoryMode) {
-      let logs = inMemoryStore.daily_logs?.filter((l: any) => l.user_id === userId) || [];
-      logs = logs.sort((a: any, b: any) =>
-        new Date(b.log_date).getTime() - new Date(a.log_date).getTime()
-      );
-      if (days) {
-        const limit = parseInt(days as string);
-        logs = logs.slice(0, limit);
-      }
-      return res.json({ success: true, data: logs });
-    }
+    const { days } = req.query;
+    const limit = days ? parseInt(days as string) : undefined;
 
-    let query = supabase
-      .from('daily_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .order('log_date', { ascending: false });
+    const db = getDatabase();
+    const { data, error } = await db.select('daily_logs', {
+      where: { user_id: userId },
+      orderBy: { column: 'log_date', direction: 'DESC' },
+      limit
+    });
 
-    if (days) {
-      const limit = parseInt(days as string);
-      query = query.limit(limit);
-    }
-
-    const { data, error } = await query;
     if (error) throw error;
 
     res.json({ success: true, data: data || [] });

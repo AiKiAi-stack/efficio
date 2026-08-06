@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { supabase } from '../lib/database';
+import { getDatabase } from '../lib/database-new';
 
 export const authRouter = Router();
 
@@ -15,35 +15,32 @@ authRouter.post('/login', async (req, res) => {
       });
     }
 
+    const db = getDatabase();
+    const normalizedEmail = email.toLowerCase();
+
     // 检查用户是否存在
-    let { data: user } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email.toLowerCase())
-      .single();
+    const { data: user } = await db.selectSingle('users', {
+      where: { email: normalizedEmail }
+    });
 
     // 如果用户不存在，创建新用户
-    if (!user) {
-      const { data: newUser, error } = await supabase
-        .from('users')
-        .insert([{ email: email.toLowerCase() }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      user = newUser;
+    let savedUser = user;
+    if (!savedUser) {
+      const result = await db.insert('users', { email: normalizedEmail });
+      if (result.error) throw result.error;
+      savedUser = result.data;
     }
 
     // 生成简单 session token (生产环境应该使用更安全的方案)
-    const sessionToken = Buffer.from(`${user.id}-${Date.now()}`).toString('base64');
+    const sessionToken = Buffer.from(`${savedUser.id}-${Date.now()}`).toString('base64');
 
     res.json({
       success: true,
       data: {
         user: {
-          id: user.id,
-          email: user.email,
-          created_at: user.created_at
+          id: savedUser.id,
+          email: savedUser.email,
+          created_at: savedUser.created_at
         },
         session_token: sessionToken
       }

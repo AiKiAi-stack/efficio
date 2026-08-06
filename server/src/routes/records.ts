@@ -1,8 +1,33 @@
 import { Router } from 'express';
-import { supabase, isMemoryMode } from '../lib/database';
+import { getDatabase } from '../lib/database-new';
 import { generateAIResponse, analyzeWithoutAI, isAiAvailable } from '../lib/ai';
 
 export const recordsRouter = Router();
+
+const STRUCTURED_ANALYSIS_PROMPT = `你是一个专业的结构化数据抽取助手。请从用户的工作记录中提取以下信息：
+
+1. task_category: 任务类别 - 从以下选择最匹配的：
+   - "development" (开发工作)
+   - "meeting" (会议)
+   - "communication" (沟通协作)
+   - "documentation" (文档编写)
+   - "review" (代码审查/设计评审)
+   - "learning" (学习研究)
+   - "other" (其他)
+
+2. time_spent: 预估耗时 - 根据描述推断，格式如 "2h", "30m", "1.5h"
+
+3. tools_used: 使用的工具列表 - 如 ["VSCode", "Git", "Slack", "Jira"]
+
+4. tags: 标签列表 - 2-5 个关键词
+
+5. is_deep_work: 是否需要深度专注（boolean）
+
+6. interruptions: 被打断的可能性（0-5 的整数）
+
+7. value_level: 价值等级 "high" | "medium" | "low"
+
+请以纯 JSON 格式返回，不要任何解释或多余文字。`;
 
 // 获取用户的所有记录
 recordsRouter.get('/', async (req, res) => {
@@ -16,20 +41,17 @@ recordsRouter.get('/', async (req, res) => {
       });
     }
 
-    const result = await (supabase
-      .from('work_records')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false }) as any);
+    const db = getDatabase();
+    const result = await db.select('work_records', {
+      where: { user_id: userId },
+      orderBy: { column: 'created_at', direction: 'DESC' }
+    });
 
-    const data = result.data || [];
-    const error = result.error;
-
-    if (error) throw error;
+    if (result.error) throw result.error;
 
     res.json({
       success: true,
-      data
+      data: result.data || []
     });
   } catch (error) {
     console.error('Get records error:', error);
@@ -69,30 +91,7 @@ recordsRouter.post('/', async (req, res) => {
       if (isAiAvailable()) {
         // 使用 AI 分析
         const content = await generateAIResponse({
-          system: `你是一个专业的结构化数据抽取助手。请从用户的工作记录中提取以下信息：
-
-1. task_category: 任务类别 - 从以下选择最匹配的：
-   - "development" (开发工作)
-   - "meeting" (会议)
-   - "communication" (沟通协作)
-   - "documentation" (文档编写)
-   - "review" (代码审查/设计评审)
-   - "learning" (学习研究)
-   - "other" (其他)
-
-2. time_spent: 预估耗时 - 根据描述推断，格式如 "2h", "30m", "1.5h"
-
-3. tools_used: 使用的工具列表 - 如 ["VSCode", "Git", "Slack", "Jira"]
-
-4. tags: 标签列表 - 2-5 个关键词
-
-5. is_deep_work: 是否需要深度专注（boolean）
-
-6. interruptions: 被打断的可能性（0-5 的整数）
-
-7. value_level: 价值等级 "high" | "medium" | "low"
-
-请以纯 JSON 格式返回，不要任何解释或多余文字。`,
+          system: STRUCTURED_ANALYSIS_PROMPT,
           userMessage: `请分析以下工作记录并提取结构化数据：\n\n${textToAnalyze}`,
           maxTokens: 1024
         });
@@ -116,25 +115,19 @@ recordsRouter.post('/', async (req, res) => {
       structuredData = analyzeWithoutAI(textToAnalyze);
     }
 
-    const result = await (supabase
-      .from('work_records')
-      .insert([{
-        user_id: userId,
-        original_text,
-        optimized_text: optimized_text || null,
-        structured_data: structuredData
-      }])
-      .select()
-      .single() as any);
+    const db = getDatabase();
+    const result = await db.insert('work_records', {
+      user_id: userId,
+      original_text,
+      optimized_text: optimized_text || null,
+      structured_data: structuredData
+    });
 
-    const data = result.data;
-    const error = result.error;
-
-    if (error) throw error;
+    if (result.error) throw result.error;
 
     res.json({
       success: true,
-      data
+      data: result.data
     });
   } catch (error) {
     console.error('Create record error:', error);
@@ -150,20 +143,14 @@ recordsRouter.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await (supabase
-      .from('work_records')
-      .select('*')
-      .eq('id', id)
-      .single() as any);
+    const db = getDatabase();
+    const result = await db.selectSingle('work_records', { where: { id } });
 
-    const data = result.data;
-    const error = result.error;
-
-    if (error) throw error;
+    if (result.error) throw result.error;
 
     res.json({
       success: true,
-      data
+      data: result.data
     });
   } catch (error) {
     console.error('Get record error:', error);
@@ -179,14 +166,10 @@ recordsRouter.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await (supabase
-      .from('work_records')
-      .delete()
-      .eq('id', id) as any);
+    const db = getDatabase();
+    const result = await db.delete('work_records', id);
 
-    const error = result.error;
-
-    if (error) throw error;
+    if (result.error) throw result.error;
 
     res.json({
       success: true,

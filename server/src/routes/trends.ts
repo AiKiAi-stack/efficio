@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { supabase } from '../lib/database';
+import { getDatabase } from '../lib/database-new';
 import { generateAIResponse, isAiAvailable } from '../lib/ai';
 
 export const trendsRouter = Router();
@@ -17,24 +17,30 @@ trendsRouter.get('/monthly', async (req, res) => {
       });
     }
 
-    let query = supabase
-      .from('monthly_trends')
-      .select('*')
-      .eq('user_id', userId)
-      .order('year', { ascending: false })
-      .order('month', { ascending: false });
-
-    if (year && month) {
-      query = query.eq('year', parseInt(year as string)).eq('month', parseInt(month as string));
-    }
-
-    const { data, error } = await query;
+    const db = getDatabase();
+    const { data, error } = await db.select('monthly_trends', {
+      where: { user_id: userId }
+    });
 
     if (error) throw error;
 
+    let trends = data || [];
+
+    if (year && month) {
+      const y = parseInt(year as string);
+      const m = parseInt(month as string);
+      trends = trends.filter(t => t.year === y && t.month === m);
+    }
+
+    // 按年份/月份降序排序
+    trends = [...trends].sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
+
     res.json({
       success: true,
-      data: data || []
+      data: trends
     });
   } catch (error) {
     console.error('Get monthly trends error:', error);
@@ -65,17 +71,19 @@ trendsRouter.post('/monthly/generate', async (req, res) => {
       });
     }
 
+    const db = getDatabase();
+
     // 获取该月的所有记录
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = `${year}-${String(Math.min(month + 1, 12)).padStart(2, '0')}-01`;
 
-    const { data: records, error: recordsError } = await supabase
-      .from('work_records')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('created_at', startDate)
-      .lt('created_at', endDate)
-      .order('created_at', { ascending: true });
+    const { data: records, error: recordsError } = await db.select('work_records', {
+      where: {
+        user_id: userId,
+        created_at: { gte: startDate, lt: endDate }
+      },
+      orderBy: { column: 'created_at', direction: 'ASC' }
+    });
 
     if (recordsError) throw recordsError;
 
@@ -87,12 +95,12 @@ trendsRouter.post('/monthly/generate', async (req, res) => {
     }
 
     // 获取该月的周总结
-    const { data: weeklySummaries } = await supabase
-      .from('weekly_summaries')
-      .select('markdown_content, summary_data')
-      .eq('user_id', userId)
-      .gte('week_start', startDate)
-      .lt('week_start', endDate);
+    const { data: weeklySummaries } = await db.select('weekly_summaries', {
+      where: {
+        user_id: userId,
+        week_start: { gte: startDate, lt: endDate }
+      }
+    });
 
     // 统计分析数据
     const stats = calculateMonthlyStats(records);
@@ -161,42 +169,27 @@ ${records.map(r => `- [${new Date(r.created_at).toLocaleDateString('zh-CN')}] ${
     };
 
     // 保存到数据库
-    const { data: existingTrend } = await supabase
-      .from('monthly_trends')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('year', year)
-      .eq('month', month)
-      .single();
+    const { data: existingTrend } = await db.selectSingle('monthly_trends', {
+      where: { user_id: userId, year, month }
+    });
 
     let savedTrend;
 
     if (existingTrend) {
-      const { data, error } = await supabase
-        .from('monthly_trends')
-        .update({
-          trend_data: trendData,
-          insights: markdownContent
-        })
-        .eq('id', existingTrend.id)
-        .select()
-        .single();
-
+      const { data, error } = await db.update('monthly_trends', existingTrend.id, {
+        trend_data: trendData,
+        insights: markdownContent
+      });
       if (error) throw error;
       savedTrend = data;
     } else {
-      const { data, error } = await supabase
-        .from('monthly_trends')
-        .insert([{
-          user_id: userId,
-          year,
-          month,
-          trend_data: trendData,
-          insights: markdownContent
-        }])
-        .select()
-        .single();
-
+      const { data, error } = await db.insert('monthly_trends', {
+        user_id: userId,
+        year,
+        month,
+        trend_data: trendData,
+        insights: markdownContent
+      });
       if (error) throw error;
       savedTrend = data;
     }

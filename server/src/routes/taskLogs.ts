@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { supabase, isMemoryMode, inMemoryStore } from '../lib/database';
+import { getDatabase } from '../lib/database-new';
 
 export const taskLogsRouter = Router();
 
@@ -11,19 +11,11 @@ taskLogsRouter.get('/', async (req, res) => {
       return res.status(401).json({ success: false, error: '未授权' });
     }
 
-    if (isMemoryMode) {
-      let logs = inMemoryStore.task_logs?.filter((l: any) => l.user_id === userId) || [];
-      logs = logs.sort((a: any, b: any) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-      return res.json({ success: true, data: logs });
-    }
-
-    const { data, error } = await supabase
-      .from('task_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+    const db = getDatabase();
+    const { data, error } = await db.select('task_logs', {
+      where: { user_id: userId },
+      orderBy: { column: 'created_at', direction: 'DESC' }
+    });
 
     if (error) throw error;
 
@@ -43,21 +35,12 @@ taskLogsRouter.get('/:id', async (req, res) => {
       return res.status(401).json({ success: false, error: '未授权' });
     }
 
-    if (isMemoryMode) {
-      const log = inMemoryStore.task_logs?.find(
-        (l: any) => l.id === taskId && l.user_id === userId
-      );
-      return res.json({ success: true, data: log || null });
-    }
+    const db = getDatabase();
+    const { data, error } = await db.selectSingle('task_logs', {
+      where: { id: taskId, user_id: userId }
+    });
 
-    const { data, error } = await supabase
-      .from('task_logs')
-      .select('*')
-      .eq('id', taskId)
-      .eq('user_id', userId)
-      .single();
-
-    if (error && error.code !== 'PGRST116') throw error;
+    if (error) throw error;
 
     res.json({ success: true, data: data || null });
   } catch (error) {
@@ -88,7 +71,7 @@ taskLogsRouter.post('/', async (req, res) => {
       tags
     } = req.body;
 
-    const taskData: any = {
+    const taskData: Record<string, any> = {
       user_id: userId,
       task_title: task_title || '',
       task_description: task_description || null,
@@ -120,51 +103,18 @@ taskLogsRouter.post('/', async (req, res) => {
       }
     }
 
-    if (isMemoryMode) {
-      if (!inMemoryStore.task_logs) {
-        inMemoryStore.task_logs = [];
-      }
-      const store = inMemoryStore.task_logs as any[];
-
-      // 如果有 id 则更新，否则创建
-      if (req.body.id) {
-        const existingIdx = store.findIndex((l: any) => l.id === req.body.id);
-        if (existingIdx >= 0) {
-          Object.assign(store[existingIdx], taskData);
-          return res.json({ success: true, data: store[existingIdx] });
-        }
-      }
-
-      const newLog = {
-        ...taskData,
-        id: Math.random().toString(36).substring(2) + Date.now().toString(36),
-        created_at: new Date().toISOString()
-      };
-      store.push(newLog);
-      return res.json({ success: true, data: newLog });
-    }
+    const db = getDatabase();
 
     let savedLog;
 
     if (req.body.id) {
       // 更新现有任务
-      const { data, error } = await supabase
-        .from('task_logs')
-        .update(taskData)
-        .eq('id', req.body.id)
-        .select()
-        .single();
-
+      const { data, error } = await db.update('task_logs', req.body.id, taskData);
       if (error) throw error;
       savedLog = data;
     } else {
       // 创建新任务
-      const { data, error } = await supabase
-        .from('task_logs')
-        .insert([taskData])
-        .select()
-        .single();
-
+      const { data, error } = await db.insert('task_logs', taskData);
       if (error) throw error;
       savedLog = data;
     }
@@ -185,23 +135,18 @@ taskLogsRouter.delete('/:id', async (req, res) => {
       return res.status(401).json({ success: false, error: '未授权' });
     }
 
-    if (isMemoryMode) {
-      const store = inMemoryStore.task_logs as any[];
-      const idx = store.findIndex((l: any) => l.id === taskId && l.user_id === userId);
-      if (idx >= 0) {
-        store.splice(idx, 1);
-      }
+    const db = getDatabase();
+
+    // 校验所有权后删除
+    const { data: existing } = await db.selectSingle('task_logs', {
+      where: { id: taskId, user_id: userId }
+    });
+
+    if (!existing) {
       return res.json({ success: true, data: null });
     }
 
-    const result = await supabase
-      .from('task_logs')
-      .delete()
-      .eq('id', taskId)
-      .eq('user_id', userId) as any;
-
-    const error = result.error;
-
+    const { error } = await db.delete('task_logs', taskId);
     if (error) throw error;
 
     res.json({ success: true, data: null });
