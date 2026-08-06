@@ -77,3 +77,25 @@ describe('降级模式不再生成假数据', () => {
     expect(Math.max(...insights.weeklyTrend.map(d => d.score))).toBe(100);
   });
 });
+
+describe('Provider 自动回退', () => {
+  it('激活 provider 未配置但存在其他已配置 provider 时，应回退使用（如仅设 DEEPSEEK_API_KEY）', () => {
+    const savedDeepseek = process.env.DEEPSEEK_API_KEY;
+    const savedProvider = process.env.AI_PROVIDER;
+
+    delete process.env.AI_PROVIDER; // 默认 anthropic（无 key）
+    process.env.DEEPSEEK_API_KEY = 'sk-test-fallback';
+
+    try {
+      const ai = require('../lib/ai');
+      expect(ai.isAiAvailable()).toBe(true);
+      const provider = ai.getCurrentProvider();
+      expect(provider?.provider).toBe('deepseek');
+    } finally {
+      if (savedDeepseek === undefined) delete process.env.DEEPSEEK_API_KEY;
+      else process.env.DEEPSEEK_API_KEY = savedDeepseek;
+      if (savedProvider === undefined) delete process.env.AI_PROVIDER;
+      else process.env.AI_PROVIDER = savedProvider;
+    }
+  });
+});

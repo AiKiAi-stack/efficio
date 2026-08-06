@@ -235,6 +235,22 @@ const getProviderConfig = (): AIProviderConfig => {
     }
   };
 
+  // 激活的 Provider 已配置 → 直接使用
+  const active = configs[providerKey];
+  if (active?.apiKey && active.apiKey.trim() !== '') {
+    return { provider: providerKey, ...active } as AIProviderConfig;
+  }
+
+  // 激活的 Provider 未配置 → 回退到第一个已配置的 Provider
+  // （典型场景：用户只设置了 DEEPSEEK_API_KEY，AI_PROVIDER 仍是默认 anthropic，
+  //   此时应直接用 DeepSeek 而不是报「AI 服务未配置」）
+  for (const [key, cfg] of Object.entries(configs)) {
+    if (key === 'vllm') continue; // vllm 的 key 是占位值，需显式选择
+    if (cfg.apiKey && cfg.apiKey.trim() !== '') {
+      return { provider: key, ...cfg } as AIProviderConfig;
+    }
+  }
+
   return { provider: providerKey, ...configs[providerKey] } as AIProviderConfig;
 };
 
@@ -379,10 +395,7 @@ export async function generateAIResponse(options: {
 export function isAiAvailable(): boolean {
   initAI();
   const config = getProviderConfig();
-  const fullConfig = configManager.read();
-  const providerKey = config.provider.toUpperCase();
-  const apiKey = fullConfig[`${providerKey}_API_KEY`] || process.env[`${providerKey}_API_KEY` as keyof typeof process.env];
-  return !!apiKey;
+  return !!config.apiKey && config.apiKey.trim() !== '';
 }
 
 // 获取当前配置的 provider 信息
