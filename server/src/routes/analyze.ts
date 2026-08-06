@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { generateAIResponse, isAiAvailable } from '../lib/ai';
+import { generateAIResponse, isAiAvailable, classifyAIError } from '../lib/ai';
 
 export const analyzeRouter = Router();
 
@@ -18,7 +18,11 @@ analyzeRouter.post('/', async (req, res) => {
     if (!isAiAvailable()) {
       return res.status(503).json({
         success: false,
-        error: 'AI 服务未配置'
+        error: 'AI 服务未配置',
+        details: {
+          type: 'not_configured',
+          hint: '请在「设置」页选择 AI Provider 并填入 API Key（国内推荐 DeepSeek / 智谱 / Kimi / 通义 / 火山引擎），或配置 server/.env 后重启服务器。'
+        }
       });
     }
 
@@ -76,9 +80,11 @@ analyzeRouter.post('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Analyze error:', error);
+    const info = (error as any)?.info || classifyAIError(error);
     res.status(500).json({
       success: false,
-      error: 'AI 分析失败，请稍后重试'
+      error: 'AI 分析失败',
+      details: info
     });
   }
 });

@@ -14,8 +14,10 @@ import { taskLogsRouter } from './routes/taskLogs';
 import { settingsRouter } from './routes/settings';
 import { initCronJobs } from './lib/cron';
 import { initializeDatabase } from './lib/database-new';
+import { getDefaultEnvFilePath } from './lib/config-manager';
 
-dotenv.config();
+// 从固定路径加载 .env（不随启动目录变化，见 lib/config-manager.ts）
+dotenv.config({ path: getDefaultEnvFilePath() });
 
 const app = express();
 
