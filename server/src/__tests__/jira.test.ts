@@ -115,4 +115,66 @@ describe('Jira 客户端', () => {
     expect(cfg.authType).toBe('basic');
     expect(cfg.maxResults).toBe(50);
   });
+
+  describe('Cookie 会话认证', () => {
+    beforeEach(() => {
+      process.env.JIRA_AUTH_TYPE = 'cookie';
+      process.env.JIRA_USERNAME = 'jira-user';
+      process.env.JIRA_PASSWORD = 'jira-pass';
+      delete process.env.JIRA_API_TOKEN;
+      // 清空模块级会话缓存
+      const mod = require('../lib/jira') as any;
+      if (typeof mod.clearSession === 'function') mod.clearSession();
+    });
+
+    afterEach(() => {
+      delete process.env.JIRA_AUTH_TYPE;
+      delete process.env.JIRA_USERNAME;
+      delete process.env.JIRA_PASSWORD;
+    });
+
+    it('应先用账号密码登录获取 JSESSIONID，再携带 Cookie 请求搜索', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ session: { name: 'JSESSIONID', value: 'abc123' } })
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ issues: [{ key: 'PROJ-9', fields: { summary: 'Cookie task' } }] })
+        });
+
+      const issues = await fetchJiraIssues();
+
+      // 第一次调用：登录
+      const [loginUrl, loginInit] = mockFetch.mock.calls[0];
+      expect(loginUrl).toContain('/rest/auth/1/session');
+      expect(loginInit.method).toBe('POST');
+      expect(JSON.parse(loginInit.body)).toEqual({ username: 'jira-user', password: 'jira-pass' });
+
+      // 第二次调用：搜索，带 Cookie
+      const [, searchInit] = mockFetch.mock.calls[1];
+      expect(searchInit.headers.Cookie).toBe('JSESSIONID=abc123');
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0].key).toBe('PROJ-9');
+    });
+
+    it('会话过期（401）时应自动重新登录并重试一次', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ session: { name: 'JSESSIONID', value: 'old' } }) })
+        .mockResolvedValueOnce({ ok: false, status: 401, text: async () => 'Unauthorized' })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ session: { name: 'JSESSIONID', value: 'new' } }) })
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ issues: [] }) });
+
+      await fetchJiraIssues();
+
+      // 应有 4 次调用：登录1 → 搜索1(401) → 登录2 → 搜索2
+      expect(mockFetch.mock.calls.length).toBe(4);
+      const [, retrySearch] = mockFetch.mock.calls[3];
+      expect(retrySearch.headers.Cookie).toBe('JSESSIONID=new');
+    });
+  });
 });

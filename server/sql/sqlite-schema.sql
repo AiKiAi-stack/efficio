@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS task_logs (
 
     -- 元数据
     priority TEXT,
+    estimated_duration TEXT,  -- 预计完成周期（如：半天 / 1天 / 1周）
     tags TEXT,  -- JSON 数组字符串
 
     created_at TEXT DEFAULT (datetime('now')),

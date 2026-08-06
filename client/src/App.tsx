@@ -195,7 +195,7 @@ function App() {
     setLoginError(null);
 
     if (!email.trim()) {
-      setLoginError('请输入邮箱地址');
+      setLoginError('请输入你的标识（邮箱或昵称）');
       return;
     }
 
@@ -243,23 +243,26 @@ function App() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                邮箱
+                你的标识（邮箱或昵称）
               </label>
               <input
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="your@email.com"
+                placeholder="例如：your@email.com 或你的昵称"
                 required
               />
+              <p className="text-xs text-gray-400 mt-1">
+                仅用于区分你的数据，无需注册、不会发送任何邮件
+              </p>
             </div>
 
             <button
               type="submit"
               className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
             >
-              登录
+              进入
             </button>
           </form>
         </div>
@@ -272,12 +275,12 @@ function App() {
       {/* Header */}
       <header className="bg-white shadow">
         <div className="max-w-5xl mx-auto px-4 py-3">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">效率追踪器</h1>
-              <p className="text-xs text-gray-500">基于 PDCA 循环的效率工具</p>
+          <div className="flex flex-wrap justify-between items-center gap-x-4 gap-y-2">
+            <div className="shrink-0">
+              <h1 className="text-xl font-bold text-gray-800 whitespace-nowrap">效率追踪器</h1>
+              <p className="text-xs text-gray-500 whitespace-nowrap">基于 PDCA 循环的效率工具</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3">
               <nav className="flex gap-2">
                 <button
                   onClick={() => setActiveTab(Tab.DAILY)}
@@ -341,9 +344,9 @@ function App() {
                 </button>
               </nav>
 
-              {/* 天气组件 */}
+              {/* 天气组件（窄屏自动换行，不挤压导航文字） */}
               {weather && (
-                <div className="relative">
+                <div className="relative hidden md:block">
                   <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
                     <span className="text-lg">{weather.icon}</span>
                     <div className="text-xs">

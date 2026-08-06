@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getUserId } from '../api';
 
 interface WorkRecord {
   id: string;
@@ -30,7 +31,7 @@ interface TaskLog {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export default function RecordsHistory() {
-  const token = localStorage.getItem('sessionToken');
+  const userId = getUserId();
 
   // 日期选择状态
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -69,13 +70,13 @@ export default function RecordsHistory() {
   }, [summaryClickCount]);
 
   const loadData = async () => {
-    if (!token) return;
+    if (!userId) return;
     setLoading(true);
 
     try {
       // 加载工作记录
       const recordsRes = await fetch(`${API_URL}/records`, {
-        headers: { 'X-User-Id': token }
+        headers: { 'X-User-Id': userId }
       });
       const recordsData = await recordsRes.json();
       if (recordsData.data) {
@@ -100,7 +101,7 @@ export default function RecordsHistory() {
 
       // 加载任务日志
       const taskLogsRes = await fetch(`${API_URL}/task-logs`, {
-        headers: { 'X-User-Id': token }
+        headers: { 'X-User-Id': userId }
       });
       const taskLogsData = await taskLogsRes.json();
       if (taskLogsData.data) {
@@ -149,7 +150,7 @@ export default function RecordsHistory() {
   };
 
   const handleGenerateAISummary = async () => {
-    if (!token) {
+    if (!userId) {
       setSummaryError('请先登录');
       return;
     }
@@ -169,7 +170,7 @@ export default function RecordsHistory() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token
+          'X-User-Id': userId
         },
         body: JSON.stringify(dateParam)
       });

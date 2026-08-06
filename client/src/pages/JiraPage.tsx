@@ -5,12 +5,14 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 interface JiraSettings {
   url: string;
   email: string;
-  authType: 'basic' | 'pat';
+  authType: 'basic' | 'pat' | 'cookie';
   jql: string;
   maxResults: number;
   enabled: boolean;
   configured: boolean;
   hasApiToken: boolean;
+  hasUsername: boolean;
+  hasPassword: boolean;
 }
 
 interface JiraTask {
@@ -29,7 +31,9 @@ export default function JiraPage() {
     url: '',
     email: '',
     apiToken: '',
-    authType: 'basic' as 'basic' | 'pat',
+    username: '',
+    password: '',
+    authType: 'cookie' as 'basic' | 'pat' | 'cookie',
     jql: 'assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC',
     maxResults: 50
   });
@@ -58,7 +62,9 @@ export default function JiraPage() {
           url: sData.data.url || '',
           email: sData.data.email || '',
           apiToken: '',
-          authType: sData.data.authType || 'basic',
+          username: '',
+          password: '',
+          authType: sData.data.authType || 'cookie',
           jql: sData.data.jql || 'assignee = currentUser() AND resolution = Unresolved ORDER BY updated DESC',
           maxResults: sData.data.maxResults || 50
         });
@@ -165,6 +171,7 @@ export default function JiraPage() {
         </div>
         <p className="text-sm text-gray-600 mb-4">
           单向拉取：把 Jira 任务同步到本地，工作记录可关联 issue key，总结按任务维度分析。
+          <span className="text-gray-400">（可选功能 —— 不配置 Jira 不影响任务与记录的使用）</span>
         </p>
 
         <div className="space-y-4">
@@ -179,44 +186,71 @@ export default function JiraPage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {form.authType === 'basic' ? '邮箱（Jira Cloud）' : '无需邮箱（PAT 认证）'}
-              </label>
-              <input
-                type="text"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                placeholder={form.authType === 'basic' ? 'you@company.com' : ''}
-                disabled={form.authType === 'pat'}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">API Token / PAT *</label>
-              <input
-                type="password"
-                value={form.apiToken}
-                onChange={(e) => setForm({ ...form, apiToken: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                placeholder={settings?.hasApiToken ? '已保存（重新输入可更新）' : '自建 Jira: PAT；Cloud: API Token'}
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">认证方式</label>
+            <select
+              value={form.authType}
+              onChange={(e) => setForm({ ...form, authType: e.target.value as 'basic' | 'pat' | 'cookie' })}
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="cookie">账号 + 密码（自建 Jira Server，Cookie 会话）</option>
+              <option value="pat">PAT 令牌（自建 Jira Server/Data Center）</option>
+              <option value="basic">邮箱 + API Token（Jira Cloud）</option>
+            </select>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">认证方式</label>
-              <select
-                value={form.authType}
-                onChange={(e) => setForm({ ...form, authType: e.target.value as 'basic' | 'pat' })}
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="pat">PAT（自建 Jira Server/Data Center）</option>
-                <option value="basic">邮箱 + API Token（Jira Cloud）</option>
-              </select>
+          {form.authType === 'cookie' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">用户名 *</label>
+                <input
+                  type="text"
+                  value={form.username}
+                  onChange={(e) => setForm({ ...form, username: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  placeholder="your.jira.username"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">密码 *</label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  placeholder={settings?.hasPassword ? '已保存（重新输入可更新）' : '你的 Jira 登录密码'}
+                />
+              </div>
             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {form.authType === 'basic' ? '邮箱（Jira Cloud）' : '无需邮箱'}
+                </label>
+                <input
+                  type="text"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  placeholder={form.authType === 'basic' ? 'you@company.com' : ''}
+                  disabled={form.authType === 'pat'}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">API Token / PAT *</label>
+                <input
+                  type="password"
+                  value={form.apiToken}
+                  onChange={(e) => setForm({ ...form, apiToken: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  placeholder={settings?.hasApiToken ? '已保存（重新输入可更新）' : '自建 Jira: PAT；Cloud: API Token'}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">最大拉取数量</label>
               <input
