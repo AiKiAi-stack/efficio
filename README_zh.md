@@ -48,19 +48,18 @@
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/your-org/RecordEvo.git
-cd RecordEvo
+git clone https://github.com/AiKiAi-stack/efficio.git
+cd efficio
 
 # 2. 复制环境变量
 cp .env.example .env
 
-# 3. 编辑 .env 填入配置
-# - SUPABASE_URL
-# - SUPABASE_SERVICE_KEY
-# - ANTHROPIC_API_KEY
+# 3. 编辑 .env 填入配置（AI Provider 任选一个填 API Key）
+# - DEEPSEEK_API_KEY=xxx   （国内推荐 DeepSeek / 智谱 / Kimi / 通义 / 火山）
+# - AI_PROVIDER=deepseek   （切换当前使用的 Provider，默认 anthropic）
 
-# 4. 启动服务
-docker-compose up -d
+# 4. 构建并启动服务（SQLite 数据持久化在 efficio_data 卷，容器重建不丢数据）
+docker-compose up -d --build
 
 # 5. 查看日志
 docker-compose logs -f
@@ -68,15 +67,17 @@ docker-compose logs -f
 
 访问 http://localhost:3001
 
-### 方式二：开发模式
+### 方式二：源码运行
 
 ```bash
-# 1. 安装依赖
-npm install
+# 1. 一键安装全部依赖（根目录 + server + client 三个子项目）
+#    国内网络会自动检测 npm 源速度并切换到 npmmirror 加速（不修改全局配置）
+npm run setup
+#    或强制使用镜像源：npm run setup:cn
 
-# 2. 配置环境变量
+# 2. 配置 AI Provider（任选一个）
 cp server/.env.example server/.env
-# 编辑 server/.env 配置
+# 编辑 server/.env，填入 API Key 并设置 AI_PROVIDER
 
 # 3. 启动开发服务器
 npm run dev
@@ -85,6 +86,9 @@ npm run dev
 访问：
 - 前端：http://localhost:5173
 - 后端：http://localhost:3001
+
+> 💡 手动安装（不使用脚本）：需分别在**根目录**、`server/`、`client/` 三个目录执行 `npm install`
+> （根目录的 `npm install` 不会安装子项目依赖）。国内网络可加 `--registry=https://registry.npmmirror.com` 加速。
 
 ---
 
@@ -174,6 +178,7 @@ RecordEvo/
 │   │   ├── api.ts         # API 客户端
 │   │   └── pages/
 │   │       ├── Dashboard.tsx      # 仪表板
+│   │       ├── DailyTracker.tsx   # 每日工作记录
 │   │       ├── TaskTracker.tsx    # 任务追踪
 │   │       ├── RecordsHistory.tsx # 历史记录
 │   │       └── Settings.tsx       # 设置页面
@@ -344,6 +349,6 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 **Made with ❤️ by RecordEvo Team**
 
-[⭐ Star this repo](https://github.com/your-org/RecordEvo/stargazers) | [🐛 Report Issues](https://github.com/your-org/RecordEvo/issues)
+[⭐ Star this repo](https://github.com/AiKiAi-stack/efficio/stargazers) | [🐛 Report Issues](https://github.com/AiKiAi-stack/efficio/issues)
 
 </div>

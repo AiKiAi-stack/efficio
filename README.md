@@ -49,19 +49,18 @@
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/RecordEvo.git
-cd RecordEvo
+git clone https://github.com/AiKiAi-stack/efficio.git
+cd efficio
 
 # 2. Copy environment file
 cp .env.example .env
 
-# 3. Edit .env with your credentials
-# - SUPABASE_URL
-# - SUPABASE_SERVICE_KEY
-# - ANTHROPIC_API_KEY
+# 3. Edit .env with your credentials (fill in any ONE AI provider key)
+# - DEEPSEEK_API_KEY=xxx
+# - AI_PROVIDER=deepseek   (switch active provider, default: anthropic)
 
-# 4. Start services
-docker-compose up -d
+# 4. Build and start (SQLite data persists in the efficio_data volume)
+docker-compose up -d --build
 
 # 5. View logs
 docker-compose logs -f
@@ -69,23 +68,29 @@ docker-compose logs -f
 
 Visit http://localhost:3001
 
-### Option 2: Development Mode
+### Option 2: Run from Source
 
 ```bash
-# 1. Install dependencies
-npm install
+# 1. Install ALL dependencies (root + server + client sub-projects)
+#    Auto-detects npm registry speed and falls back to npmmirror for CN networks
+npm run setup
+#    Or force the mirror: npm run setup:cn
 
-# 2. Configure environment
+# 2. Configure an AI provider (pick one)
 cp server/.env.example server/.env
-# Edit server/.env with your configuration
+# Edit server/.env, fill in the API key and set AI_PROVIDER
 
-# 3. Start development server
+# 3. Start the development server
 npm run dev
 ```
 
 Visit:
 - Frontend: http://localhost:5173
 - Backend: http://localhost:3001
+
+> 💡 Manual install (without the script): run `npm install` in the **root**, `server/` and `client/`
+> directories separately (root `npm install` does NOT install sub-project deps).
+> For CN networks add `--registry=https://registry.npmmirror.com`.
 
 ---
 
@@ -345,6 +350,6 @@ MIT License - See [LICENSE](LICENSE) file for details
 
 **Made with ❤️ by RecordEvo Team**
 
-[⭐ Star this repo](https://github.com/your-org/RecordEvo/stargazers) | [🐛 Report Issues](https://github.com/your-org/RecordEvo/issues)
+[⭐ Star this repo](https://github.com/AiKiAi-stack/efficio/stargazers) | [🐛 Report Issues](https://github.com/AiKiAi-stack/efficio/issues)
 
 </div>

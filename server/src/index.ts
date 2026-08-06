@@ -15,8 +15,16 @@ import { settingsRouter } from './routes/settings';
 import { jiraRouter } from './routes/jira';
 import { initCronJobs } from './lib/cron';
 import { initializeDatabase } from './lib/database-new';
+import { getDefaultEnvFilePath } from './lib/config-manager';
+import { patchConsole, requestLogger } from './lib/logger';
+import { systemRouter } from './routes/system';
+import { isAiAvailable } from './lib/ai';
 
-dotenv.config();
+// 从固定路径加载 .env（不随启动目录变化，见 lib/config-manager.ts）
+dotenv.config({ path: getDefaultEnvFilePath() });
+
+// 日志补丁：console.error/warn 落文件 + 最近错误缓冲（可追溯）
+patchConsole();
 
 const app = express();
 
@@ -49,16 +57,30 @@ app.use(cors({
 app.use(express.json());
 app.use(express.text());
 
+// 请求日志中间件：request-id + 方法/路径/状态/耗时
+app.use(requestLogger);
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'production'
+    environment: process.env.NODE_ENV || 'production',
+    version: (() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        return require('../../package.json').version || '0.1.0';
+      } catch {
+        return '0.1.0';
+      }
+    })(),
+    database: process.env.DATABASE_MODE || 'sqlite',
+    aiConfigured: isAiAvailable()
   });
 });
 
 // API Routes
+app.use('/api/system', systemRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/records', recordsRouter);
 app.use('/api/optimize', optimizeRouter);
@@ -120,7 +142,8 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   }
   res.status(500).json({
     success: false,
-    error: err.message
+    error: err.message,
+    requestId: (req.headers['x-request-id'] as string) || undefined
   });
 });
 

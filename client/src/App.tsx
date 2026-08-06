@@ -5,12 +5,14 @@ import TaskTracker from './pages/TaskTracker';
 import RecordsHistory from './pages/RecordsHistory';
 import Settings from './pages/Settings';
 import JiraPage from './pages/JiraPage';
+import SystemStatus from './pages/SystemStatus';
 
 const enum Tab {
   DAILY = 'daily',
   RECORDS = 'records',
   DASHBOARD = 'dashboard',
   JIRA = 'jira',
+  SYSTEM = 'system',
   SETTINGS = 'settings'
 }
 
@@ -318,6 +320,16 @@ function App() {
                   🔗 Jira
                 </button>
                 <button
+                  onClick={() => setActiveTab(Tab.SYSTEM)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                    activeTab === Tab.SYSTEM
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  🩺 系统
+                </button>
+                <button
                   onClick={() => setActiveTab(Tab.SETTINGS)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                     activeTab === Tab.SETTINGS
@@ -419,6 +431,8 @@ function App() {
         {activeTab === Tab.DASHBOARD && <Dashboard />}
 
         {activeTab === Tab.JIRA && <JiraPage />}
+
+        {activeTab === Tab.SYSTEM && <SystemStatus />}
 
         {activeTab === Tab.SETTINGS && <Settings />}
       </main>
