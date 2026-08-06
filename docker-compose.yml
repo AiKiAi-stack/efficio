@@ -10,6 +10,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      # 监听所有网卡：否则容器内只绑 localhost，宿主机端口映射不通
+      - HOST=0.0.0.0
       # AI Provider 密钥（从同目录 .env 读取，未配置则为空）
       - AI_PROVIDER=${AI_PROVIDER:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
