@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { generateAIResponse, isAiAvailable, optimizeWithoutAI } from '../lib/ai';
+import { generateAIResponse, isAiAvailable, optimizeWithoutAI, classifyAIError } from '../lib/ai';
 
 export const optimizeRouter = Router();
 
@@ -46,9 +46,11 @@ optimizeRouter.post('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Optimize error:', error);
+    const info = (error as any)?.info || classifyAIError(error);
     res.status(500).json({
       success: false,
-      error: 'AI 优化失败，请稍后重试'
+      error: 'AI 优化失败',
+      details: info
     });
   }
 });

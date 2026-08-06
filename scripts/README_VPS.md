@@ -18,8 +18,9 @@
 mkdir -p ~/scripts
 cd ~/scripts
 
-# 下载部署脚本
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/RecordEvo/main/scripts/deploy.sh -o deploy.sh
+# 下载部署脚本（国内网络 raw.githubusercontent.com 不通时，用 ghfast.top 镜像）
+curl -fsSL https://raw.githubusercontent.com/AiKiAi-stack/efficio/main/scripts/deploy.sh -o deploy.sh || \
+curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/AiKiAi-stack/efficio/main/scripts/deploy.sh -o deploy.sh
 chmod +x deploy.sh
 ```
 
@@ -166,7 +167,8 @@ npm start
 ```bash
 #!/bin/bash
 cd ~/scripts
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/RecordEvo/main/scripts/deploy.sh -o deploy.sh
+curl -fsSL https://raw.githubusercontent.com/AiKiAi-stack/efficio/main/scripts/deploy.sh -o deploy.sh || \
+curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/AiKiAi-stack/efficio/main/scripts/deploy.sh -o deploy.sh
 chmod +x deploy.sh
 sudo ./deploy.sh --binary
 ```

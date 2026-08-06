@@ -4,6 +4,8 @@
   "description": "工作记录与效率分析系统 - Work Record & Efficiency Analysis System",
   "private": true,
   "scripts": {
+    "setup": "bash scripts/install.sh",
+    "setup:cn": "bash scripts/install.sh --mirror",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",

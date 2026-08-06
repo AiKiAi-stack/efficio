@@ -1,8 +1,11 @@
 node_modules
 dist
+data
+*.db
 .env
 .env.local
 *.log
+.qwen
 .DS_Store
 coverage
 .vscode
