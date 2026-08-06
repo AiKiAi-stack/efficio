@@ -280,6 +280,11 @@ export class SQLiteAdapter implements IDatabaseAdapter {
         table: 'work_records',
         column: 'jira_key',
         ddl: 'ALTER TABLE work_records ADD COLUMN jira_key TEXT'
+      },
+      {
+        table: 'task_logs',
+        column: 'estimated_duration',
+        ddl: 'ALTER TABLE task_logs ADD COLUMN estimated_duration TEXT'
       }
     ];
 

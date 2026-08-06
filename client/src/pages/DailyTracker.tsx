@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
+import { getUserId } from '../api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export default function DailyTracker() {
-  const token = localStorage.getItem('sessionToken');
+  const userId = getUserId();
 
   const [goals, setGoals] = useState('');
   const [accomplishments, setAccomplishments] = useState('');
@@ -24,11 +25,11 @@ export default function DailyTracker() {
   }, []);
 
   const loadTodayLog = async () => {
-    if (!token) return;
+    if (!userId) return;
 
     try {
       const res = await fetch(`${API_URL}/daily-logs/today`, {
-        headers: { 'X-User-Id': token }
+        headers: { 'X-User-Id': userId }
       });
       const data = await res.json();
 
@@ -69,7 +70,7 @@ export default function DailyTracker() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token!
+          'X-User-Id': userId!
         },
         body: JSON.stringify({
           goals,
@@ -105,7 +106,7 @@ export default function DailyTracker() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token!
+          'X-User-Id': userId!
         },
         body: JSON.stringify({
           goals,
@@ -136,7 +137,7 @@ export default function DailyTracker() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token!
+          'X-User-Id': userId!
         },
         body: JSON.stringify({
           goals,

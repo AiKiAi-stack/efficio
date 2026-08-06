@@ -50,7 +50,7 @@ describe('Dashboard Component', () => {
   });
 
   it('should render records count when data exists', async () => {
-    localStorage.setItem('sessionToken', 'test-token');
+    localStorage.setItem('user', JSON.stringify({ id: 'test-user', email: 'test@test.com' }));
 
     const mockRecords = {
       json: async () => ({ data: [{ id: '1', original_text: 'Test' }] }),
@@ -99,7 +99,7 @@ describe('Dashboard Component', () => {
   });
 
   it('should show error message when summary generation fails', async () => {
-    localStorage.setItem('sessionToken', 'test-token');
+    localStorage.setItem('user', JSON.stringify({ id: 'test-user', email: 'test@test.com' }));
 
     vi.mocked(fetch).mockResolvedValue({
       ok: false,

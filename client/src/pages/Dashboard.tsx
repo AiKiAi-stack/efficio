@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { getUserId } from '../api';
 
 interface WorkRecord {
   id: string;
@@ -98,12 +99,12 @@ export default function Dashboard() {
   }, []);
 
   const loadData = async () => {
-    const token = localStorage.getItem('sessionToken');
-    if (!token) return;
+    const userId = getUserId();
+    if (!userId) return;
 
     // 加载记录
     const recordsRes = await fetch('/api/records', {
-      headers: { 'X-User-Id': token }
+      headers: { 'X-User-Id': userId }
     });
     const recordsData = await recordsRes.json();
     if (recordsData.data) {
@@ -112,7 +113,7 @@ export default function Dashboard() {
 
     // 加载任务日志
     const taskLogsRes = await fetch('/api/task-logs', {
-      headers: { 'X-User-Id': token }
+      headers: { 'X-User-Id': userId }
     });
     const taskLogsData = await taskLogsRes.json();
     if (taskLogsData.data) {
@@ -122,8 +123,8 @@ export default function Dashboard() {
 
   // 生成 AI 总结
   const handleGenerateSummary = async (range?: { start: string; end: string }) => {
-    const token = localStorage.getItem('sessionToken');
-    if (!token) {
+    const userId = getUserId();
+    if (!userId) {
       setSummaryError('请先登录');
       setTimeout(() => setSummaryError(null), 3000);
       return;
@@ -141,7 +142,7 @@ export default function Dashboard() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token
+          'X-User-Id': userId
         },
         body: JSON.stringify(body)
       });

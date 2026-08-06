@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getUserId } from '../api';
 
 interface TaskLog {
   id: string;
@@ -19,13 +20,14 @@ interface TaskLog {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export default function TaskTracker() {
-  const token = localStorage.getItem('sessionToken');
+  const userId = getUserId();
 
   // 当前任务状态
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskCategory, setTaskCategory] = useState('');
   const [priority, setPriority] = useState('medium');
+  const [estimatedDuration, setEstimatedDuration] = useState('');
 
   // 执行阶段
   const [outcome, setOutcome] = useState('');
@@ -59,10 +61,10 @@ export default function TaskTracker() {
   }, []);
 
   const loadActiveTask = async () => {
-    if (!token) return;
+    if (!userId) return;
     try {
       const res = await fetch(`${API_URL}/task-logs`, {
-        headers: { 'X-User-Id': token }
+        headers: { 'X-User-Id': userId }
       });
       const data = await res.json();
       if (data.data && data.data.length > 0) {
@@ -86,10 +88,10 @@ export default function TaskTracker() {
   };
 
   const loadTaskHistory = async () => {
-    if (!token) return;
+    if (!userId) return;
     try {
       const res = await fetch(`${API_URL}/task-logs`, {
-        headers: { 'X-User-Id': token }
+        headers: { 'X-User-Id': userId }
       });
       const data = await res.json();
       if (data.data) {
@@ -112,7 +114,7 @@ export default function TaskTracker() {
       return;
     }
 
-    if (!token) {
+    if (!userId) {
       showError('会话已过期，请重新登录');
       return;
     }
@@ -123,13 +125,14 @@ export default function TaskTracker() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token
+          'X-User-Id': userId
         },
         body: JSON.stringify({
           task_title: taskTitle,
           task_description: taskDescription,
           task_category: taskCategory,
           priority: priority,
+          estimated_duration: estimatedDuration,
           status: 'in_progress'
         })
       });
@@ -166,7 +169,7 @@ export default function TaskTracker() {
       return;
     }
 
-    if (!token) {
+    if (!userId) {
       showError('会话已过期，请重新登录');
       return;
     }
@@ -177,7 +180,7 @@ export default function TaskTracker() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token
+          'X-User-Id': userId
         },
         body: JSON.stringify({
           id: currentTaskId,
@@ -185,6 +188,7 @@ export default function TaskTracker() {
           task_description: taskDescription,
           task_category: taskCategory,
           priority: priority,
+          estimated_duration: estimatedDuration,
           outcome: outcome,
           status: 'completed'
         })
@@ -222,7 +226,7 @@ export default function TaskTracker() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Id': token!
+          'X-User-Id': userId!
         },
         body: JSON.stringify({
           id: currentTaskId,
@@ -259,6 +263,7 @@ export default function TaskTracker() {
     setTaskDescription('');
     setTaskCategory('');
     setPriority('medium');
+    setEstimatedDuration('');
     setOutcome('');
     setReflection('');
     setStatus('pending');
@@ -360,6 +365,25 @@ export default function TaskTracker() {
                   <option value="low">低</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  预计周期
+                </label>
+                <select
+                  value={estimatedDuration}
+                  onChange={(e) => setEstimatedDuration(e.target.value)}
+                  disabled={status !== 'pending'}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                >
+                  <option value="">不设置</option>
+                  <option value="<1小时">&lt;1小时</option>
+                  <option value="半天">半天</option>
+                  <option value="1天">1天</option>
+                  <option value="2-3天">2-3天</option>
+                  <option value="1周">1周</option>
+                  <option value=">1周">&gt;1周</option>
+                </select>
+              </div>
             </div>
 
             {status === 'pending' && (
@@ -386,6 +410,11 @@ export default function TaskTracker() {
             {startTime && status !== 'pending' && (
               <span className="text-xs text-gray-500">
                 {new Date(startTime).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}
+              </span>
+            )}
+            {estimatedDuration && status === 'in_progress' && (
+              <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                预计 {estimatedDuration}
               </span>
             )}
             {status === 'completed' && (

@@ -68,6 +68,7 @@ taskLogsRouter.post('/', async (req, res) => {
       reflection,
       time_spent_minutes,
       priority,
+      estimated_duration,
       tags
     } = req.body;
 
@@ -83,6 +84,7 @@ taskLogsRouter.post('/', async (req, res) => {
       reflection: reflection || null,
       time_spent_minutes: time_spent_minutes || null,
       priority: priority || null,
+      estimated_duration: estimated_duration || null,
       tags: tags || null,
       updated_at: new Date().toISOString()
     };

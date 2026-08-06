@@ -3,6 +3,21 @@
 // VITE_API_URL=http://YOUR_SERVER_IP:3001/api
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+/**
+ * 获取当前登录用户的真实 ID（localStorage 'user' 中的 id）
+ * 注意：不是 sessionToken！sessionToken 是 base64(userId-时间戳)，
+ * 不能作为 X-User-Id 请求头（会导致数据库外键校验失败）。
+ */
+export function getUserId(): string | null {
+  try {
+    const saved = localStorage.getItem('user');
+    if (!saved) return null;
+    return JSON.parse(saved).id || null;
+  } catch {
+    return null;
+  }
+}
+
 export interface User {
   id: string;
   email: string;
