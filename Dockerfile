@@ -12,13 +12,15 @@ WORKDIR /app
 
 # 国内网络加速（如需官方源可注释掉）
 ENV npm_config_registry=https://registry.npmmirror.com
-# better-sqlite3 预编译二进制走 npmmirror 镜像（下载失败会自动回退到本地编译）
-ENV npm_config_better_sqlite3_binary_host_mirror=https://registry.npmmirror.com/-/binary/better-sqlite3
+# 注意：不给 better-sqlite3 设置二进制镜像 —— 预编译产物是 glibc 版，
+# 在 alpine(musl) 里无法加载（缺 ld-linux-x86-64.so.2）。
+# 依赖下方编译工具链在构建期本地编译 musl 版本。
 
-# 编译工具链：better-sqlite3 等原生模块在无预编译产物时需要 node-gyp 编译
+# 编译工具链：better-sqlite3 在 alpine 上必须本地编译（预编译产物是 glibc 的），
+# 需要 python3/make/g++ 和 musl 头文件（musl-dev）
 # apk 使用阿里云镜像（官方源 dl-cdn.alpinelinux.org 在国内慢/不通）
 RUN sed -i 's|https://dl-cdn.alpinelinux.org|https://mirrors.aliyun.com|g' /etc/apk/repositories \
- && apk add --no-cache python3 make g++
+ && apk add --no-cache python3 make g++ musl-dev
 
 # 先复制依赖清单，充分利用 Docker 层缓存
 COPY package.json package-lock.json ./
