@@ -13,263 +13,323 @@ interface TaskLog {
   reflection: string | null;
   time_spent_minutes: number | null;
   priority: string | null;
+  estimated_duration: string | null;
   tags: string[] | null;
   created_at: string;
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+type Filter = 'all' | 'in_progress' | 'pending' | 'completed';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  development: '开发',
+  meeting: '会议',
+  communication: '沟通',
+  documentation: '文档',
+  review: '评审',
+  learning: '学习',
+  other: '其他'
+};
+
+const PRIORITY_STYLES: Record<string, { label: string; cls: string }> = {
+  high: { label: '高', cls: 'bg-red-100 text-red-700' },
+  medium: { label: '中', cls: 'bg-amber-100 text-amber-700' },
+  low: { label: '低', cls: 'bg-gray-100 text-gray-600' }
+};
+
+const STATUS_STYLES: Record<string, { label: string; cls: string }> = {
+  pending: { label: '待办', cls: 'bg-gray-100 text-gray-600' },
+  in_progress: { label: '进行中', cls: 'bg-blue-100 text-blue-700' },
+  completed: { label: '已完成', cls: 'bg-green-100 text-green-700' }
+};
+
+function formatDuration(minutes: number | null): string {
+  if (minutes == null) return '';
+  if (minutes < 60) return `${minutes}分钟`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}小时${m}分` : `${h}小时`;
+}
+
+function elapsedSince(iso: string | null): string {
+  if (!iso) return '';
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return '刚刚开始';
+  if (mins < 60) return `已进行 ${mins}分钟`;
+  const h = Math.floor(mins / 60);
+  return `已进行 ${h}小时${mins % 60}分`;
+}
+
+interface TaskCardProps {
+  task: TaskLog;
+  onChanged: () => void;
+  onError: (msg: string) => void;
+}
+
+function TaskCard({ task, onChanged, onError }: TaskCardProps) {
+  const userId = getUserId();
+  const [outcome, setOutcome] = useState(task.outcome || '');
+  const [reflection, setReflection] = useState(task.reflection || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async (patch: Partial<TaskLog>) => {
+    if (!userId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/task-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+        body: JSON.stringify({
+          id: task.id,
+          task_title: task.task_title,
+          task_description: task.task_description,
+          task_category: task.task_category,
+          priority: task.priority,
+          estimated_duration: task.estimated_duration,
+          outcome,
+          reflection,
+          status: task.status,
+          ...patch
+        })
+      });
+      const data = await res.json();
+      if (data.data) {
+        onChanged();
+      } else {
+        onError(data.error || '保存失败');
+      }
+    } catch (error) {
+      onError('保存失败，请重试');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const del = async () => {
+    if (!window.confirm(`确定删除任务「${task.task_title}」吗？`)) return;
+    if (!userId) return;
+    try {
+      await fetch(`${API_URL}/task-logs/${task.id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-Id': userId }
+      });
+      onChanged();
+    } catch (error) {
+      onError('删除失败，请重试');
+    }
+  };
+
+  const priorityStyle = PRIORITY_STYLES[task.priority || 'medium'] || PRIORITY_STYLES.medium;
+  const statusStyle = STATUS_STYLES[task.status];
+
+  return (
+    <div className={`bg-white rounded-lg shadow p-4 border-l-4 transition ${
+      task.status === 'in_progress' ? 'border-blue-500'
+      : task.status === 'completed' ? 'border-green-500'
+      : 'border-gray-200'
+    }`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`px-1.5 py-0.5 text-xs rounded ${statusStyle.cls}`}>{statusStyle.label}</span>
+            {task.task_category && (
+              <span className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                {CATEGORY_LABELS[task.task_category] || task.task_category}
+              </span>
+            )}
+            <span className={`px-1.5 py-0.5 text-xs rounded ${priorityStyle.cls}`}>
+              优先级 {priorityStyle.label}
+            </span>
+            {task.estimated_duration && (
+              <span className="px-1.5 py-0.5 text-xs bg-cyan-100 text-cyan-700 rounded">
+                预计 {task.estimated_duration}
+              </span>
+            )}
+          </div>
+          <h3 className={`text-sm font-semibold text-gray-800 mt-1.5 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
+            {task.task_title}
+          </h3>
+          {task.task_description && (
+            <p className="text-xs text-gray-500 mt-0.5">{task.task_description}</p>
+          )}
+          <div className="text-xs text-gray-400 mt-1 flex items-center gap-2 flex-wrap">
+            <span>创建于 {new Date(task.created_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+            {task.status === 'in_progress' && <span className="text-blue-500">{elapsedSince(task.start_time)}</span>}
+            {task.status === 'completed' && task.time_spent_minutes != null && (
+              <span>实际用时 {formatDuration(task.time_spent_minutes)}</span>
+            )}
+          </div>
+        </div>
+        <button onClick={del} className="text-xs text-gray-300 hover:text-red-500 shrink-0" title="删除任务">
+          🗑
+        </button>
+      </div>
+
+      {/* 操作区 */}
+      <div className="mt-3 space-y-2">
+        {task.status === 'pending' && (
+          <button
+            onClick={() => save({ status: 'in_progress' })}
+            disabled={saving}
+            className="w-full bg-blue-600 text-white py-1.5 text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
+          >
+            {saving ? '保存中...' : '▶ 开始任务'}
+          </button>
+        )}
+
+        {task.status === 'in_progress' && (
+          <div className="space-y-2">
+            <textarea
+              value={outcome}
+              onChange={(e) => setOutcome(e.target.value)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 resize-none"
+              rows={2}
+              placeholder="实际完成了什么？"
+            />
+            <button
+              onClick={() => save({ status: 'completed', outcome })}
+              disabled={saving || !outcome.trim()}
+              className="w-full bg-green-600 text-white py-1.5 text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+            >
+              {saving ? '保存中...' : '✓ 标记完成'}
+            </button>
+          </div>
+        )}
+
+        {task.status === 'completed' && (
+          <div className="space-y-2">
+            {task.outcome && (
+              <div className="text-xs text-gray-600 bg-gray-50 rounded p-2">
+                <span className="font-medium text-gray-500">完成内容：</span>
+                {task.outcome}
+              </div>
+            )}
+            <textarea
+              value={reflection}
+              onChange={(e) => setReflection(e.target.value)}
+              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 resize-none"
+              rows={2}
+              placeholder="任务反思（可选）：好的/改进"
+            />
+            <button
+              onClick={() => save({ reflection })}
+              disabled={saving}
+              className="w-full bg-purple-600 text-white py-1.5 text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 transition"
+            >
+              {saving ? '保存中...' : '💾 保存反思'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function TaskTracker() {
   const userId = getUserId();
+  const [tasks, setTasks] = useState<TaskLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [createNotice, setCreateNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // 当前任务状态
+  // 创建表单
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
   const [taskCategory, setTaskCategory] = useState('');
   const [priority, setPriority] = useState('medium');
   const [estimatedDuration, setEstimatedDuration] = useState('');
+  const [creating, setCreating] = useState(false);
 
-  // 执行阶段
-  const [outcome, setOutcome] = useState('');
-  const [status, setStatus] = useState<'pending' | 'in_progress' | 'completed'>('pending');
-  const [startTime, setStartTime] = useState<string | null>(null);
-
-  // 反思阶段
-  const [reflection, setReflection] = useState('');
-
-  const [loading, setLoading] = useState(false);
-  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
-
-  // 保存状态反馈
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // 显示错误提示（2 秒后消失）
   const showError = (message: string) => {
     setErrorMessage(message);
     setTimeout(() => setErrorMessage(null), 3000);
   };
 
-  // 任务历史 - 只显示当天
-  const [taskHistory, setTaskHistory] = useState<TaskLog[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const loadTasks = async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_URL}/task-logs`, {
+        headers: { 'X-User-Id': userId }
+      });
+      const data = await res.json();
+      if (data.data) {
+        const order: Record<string, number> = { in_progress: 0, pending: 1, completed: 2 };
+        setTasks([...data.data].sort((a, b) => {
+          const diff = (order[a.status] ?? 9) - (order[b.status] ?? 9);
+          if (diff !== 0) return diff;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load tasks:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // 加载当前任务
   useEffect(() => {
-    loadActiveTask();
-    loadTaskHistory();
+    loadTasks();
   }, []);
 
-  const loadActiveTask = async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(`${API_URL}/task-logs`, {
-        headers: { 'X-User-Id': userId }
-      });
-      const data = await res.json();
-      if (data.data && data.data.length > 0) {
-        // 找到未完成的任务
-        const activeTask = data.data.find((t: TaskLog) => t.status !== 'completed');
-        if (activeTask) {
-          setTaskTitle(activeTask.task_title);
-          setTaskDescription(activeTask.task_description || '');
-          setTaskCategory(activeTask.task_category || '');
-          setPriority(activeTask.priority || 'medium');
-          setStartTime(activeTask.start_time);
-          setStatus(activeTask.status);
-          setOutcome(activeTask.outcome || '');
-          setReflection(activeTask.reflection || '');
-          setCurrentTaskId(activeTask.id);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load active task:', error);
-    }
-  };
-
-  const loadTaskHistory = async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(`${API_URL}/task-logs`, {
-        headers: { 'X-User-Id': userId }
-      });
-      const data = await res.json();
-      if (data.data) {
-        // 只保留当天完成的任务
-        const today = new Date().toDateString();
-        const todaysTasks = data.data.filter((t: TaskLog) =>
-          t.status === 'completed' && new Date(t.created_at).toDateString() === today
-        );
-        setTaskHistory(todaysTasks);
-      }
-    } catch (error) {
-      console.error('Failed to load history:', error);
-    }
-  };
-
-  // 阶段 1: 开始任务 (Plan)
-  const handleStartTask = async () => {
+  const handleCreateTask = async () => {
     if (!taskTitle.trim()) {
-      showError('请先填写任务标题');
+      showError('请填写任务标题');
       return;
     }
-
     if (!userId) {
       showError('会话已过期，请重新登录');
       return;
     }
-
-    setLoading(true);
+    setCreating(true);
     try {
       const res = await fetch(`${API_URL}/task-logs`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId
-        },
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
         body: JSON.stringify({
-          task_title: taskTitle,
-          task_description: taskDescription,
-          task_category: taskCategory,
-          priority: priority,
-          estimated_duration: estimatedDuration,
-          status: 'in_progress'
+          task_title: taskTitle.trim(),
+          task_description: taskDescription || undefined,
+          task_category: taskCategory || undefined,
+          priority,
+          estimated_duration: estimatedDuration || undefined,
+          status: 'pending'
         })
       });
-
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-
       const data = await res.json();
       if (data.data) {
-        setCurrentTaskId(data.data.id);
-        setStartTime(data.data.start_time);
-        setStatus('in_progress');
-        setSaveStatus('success');
-        setTimeout(() => setSaveStatus('idle'), 2000);
+        setTaskTitle('');
+        setTaskDescription('');
+        setTaskCategory('');
+        setEstimatedDuration('');
+        setCreateNotice({ type: 'success', message: '任务已创建' });
+        setTimeout(() => setCreateNotice(null), 2500);
+        loadTasks();
       } else {
-        showError('创建任务失败');
-        setSaveStatus('error');
+        setCreateNotice({ type: 'error', message: data.error || '创建失败' });
       }
-    } catch (error) {
-      console.error('Failed to start task:', error);
-      showError('网络错误，请检查连接');
-      setSaveStatus('error');
+    } catch (error: any) {
+      setCreateNotice({ type: 'error', message: '创建失败：' + error.message });
     } finally {
-      setLoading(false);
-      setTimeout(() => setSaveStatus('idle'), 2000);
+      setCreating(false);
     }
   };
 
-  // 阶段 2: 完成任务 (Do)
-  const handleCompleteTask = async () => {
-    if (!outcome.trim()) {
-      showError('请先填写完成内容');
-      return;
-    }
-
-    if (!userId) {
-      showError('会话已过期，请重新登录');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/task-logs`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId
-        },
-        body: JSON.stringify({
-          id: currentTaskId,
-          task_title: taskTitle,
-          task_description: taskDescription,
-          task_category: taskCategory,
-          priority: priority,
-          estimated_duration: estimatedDuration,
-          outcome: outcome,
-          status: 'completed'
-        })
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-
-      const data = await res.json();
-      if (data.data) {
-        setStatus('completed');
-        setSaveStatus('success');
-        setTimeout(() => setSaveStatus('idle'), 2000);
-        loadTaskHistory();
-      } else {
-        showError('完成任务失败');
-        setSaveStatus('error');
-      }
-    } catch (error) {
-      console.error('Failed to complete task:', error);
-      showError('网络错误，请检查连接');
-      setSaveStatus('error');
-    } finally {
-      setLoading(false);
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    }
+  const counts = {
+    all: tasks.length,
+    in_progress: tasks.filter(t => t.status === 'in_progress').length,
+    pending: tasks.filter(t => t.status === 'pending').length,
+    completed: tasks.filter(t => t.status === 'completed').length
   };
 
-  // 阶段 3: 保存反思 (Check/Act)
-  const handleSaveReflection = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/task-logs`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId!
-        },
-        body: JSON.stringify({
-          id: currentTaskId,
-          task_title: taskTitle,
-          task_description: taskDescription,
-          task_category: taskCategory,
-          priority: priority,
-          outcome: outcome,
-          reflection: reflection,
-          status: 'completed'
-        })
-      });
+  const filteredTasks = filter === 'all' ? tasks : tasks.filter(t => t.status === filter);
 
-      const data = await res.json();
-      if (data.success) {
-        setSaveStatus('success');
-        loadTaskHistory();
-      } else {
-        setSaveStatus('error');
-      }
-    } catch (error) {
-      console.error('Failed to save reflection:', error);
-      setSaveStatus('error');
-    } finally {
-      setLoading(false);
-      // 2 秒后清除状态
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    }
-  };
-
-  // 重置以开始新任务
-  const handleNewTask = () => {
-    setTaskTitle('');
-    setTaskDescription('');
-    setTaskCategory('');
-    setPriority('medium');
-    setEstimatedDuration('');
-    setOutcome('');
-    setReflection('');
-    setStatus('pending');
-    setStartTime(null);
-    setCurrentTaskId(null);
-  };
+  const filterTabs: Array<{ key: Filter; label: string }> = [
+    { key: 'all', label: `全部 ${counts.all}` },
+    { key: 'in_progress', label: `⏳ 进行中 ${counts.in_progress}` },
+    { key: 'pending', label: `📋 待办 ${counts.pending}` },
+    { key: 'completed', label: `✅ 已完成 ${counts.completed}` }
+  ];
 
   return (
     <div className="space-y-4">
@@ -281,275 +341,126 @@ export default function TaskTracker() {
         </div>
       )}
 
-      {/* 横向三阶段布局 */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* 阶段 1: 任务设定 (Plan) */}
-        <div className={`bg-white rounded-lg shadow p-4 border-l-4 ${
-          status === 'pending' ? 'border-blue-500' :
-          status === 'in_progress' ? 'border-green-500' : 'border-gray-300'
-        }`}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-800">
-              📍 任务设定 (Plan)
-            </h2>
-            {status !== 'pending' && (
-              <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
-                已完成
-              </span>
-            )}
-          </div>
-
-          <div className="space-y-3">
+      {/* 创建任务 */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h2 className="text-sm font-semibold text-gray-800 mb-3">📝 创建任务（可同时管理多个）</h2>
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                任务标题 *
-              </label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">任务标题 *</label>
               <input
                 type="text"
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
-                disabled={status !== 'pending'}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateTask(); }}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                 placeholder="例如：完成登录页面"
               />
             </div>
-
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                任务描述
-              </label>
-              <textarea
+              <label className="block text-xs font-medium text-gray-700 mb-1">任务描述</label>
+              <input
+                type="text"
                 value={taskDescription}
                 onChange={(e) => setTaskDescription(e.target.value)}
-                disabled={status !== 'pending'}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-gray-100"
-                rows={2}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                 placeholder="可选：详细描述..."
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  类别
-                </label>
-                <select
-                  value={taskCategory}
-                  onChange={(e) => setTaskCategory(e.target.value)}
-                  disabled={status !== 'pending'}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                >
-                  <option value="">选择类别</option>
-                  <option value="development">开发</option>
-                  <option value="meeting">会议</option>
-                  <option value="communication">沟通</option>
-                  <option value="documentation">文档</option>
-                  <option value="review">评审</option>
-                  <option value="learning">学习</option>
-                  <option value="other">其他</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  优先级
-                </label>
-                <select
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  disabled={status !== 'pending'}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                >
-                  <option value="high">高</option>
-                  <option value="medium">中</option>
-                  <option value="low">低</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  预计周期
-                </label>
-                <select
-                  value={estimatedDuration}
-                  onChange={(e) => setEstimatedDuration(e.target.value)}
-                  disabled={status !== 'pending'}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                >
-                  <option value="">不设置</option>
-                  <option value="<1小时">&lt;1小时</option>
-                  <option value="半天">半天</option>
-                  <option value="1天">1天</option>
-                  <option value="2-3天">2-3天</option>
-                  <option value="1周">1周</option>
-                  <option value=">1周">&gt;1周</option>
-                </select>
-              </div>
-            </div>
-
-            {status === 'pending' && (
-              <button
-                onClick={handleStartTask}
-                disabled={loading || !taskTitle.trim()}
-                className="w-full bg-blue-600 text-white py-1.5 text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                {loading ? '保存中...' : '🚀 开始任务'}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 阶段 2: 执行追踪 (Do) */}
-        <div className={`bg-white rounded-lg shadow p-4 border-l-4 ${
-          status === 'in_progress' ? 'border-yellow-500' :
-          status === 'completed' ? 'border-green-500' : 'border-gray-300'
-        } ${status === 'pending' && 'opacity-50'}`}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-800">
-              ✅ 执行追踪 (Do)
-            </h2>
-            {startTime && status !== 'pending' && (
-              <span className="text-xs text-gray-500">
-                {new Date(startTime).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}
-              </span>
-            )}
-            {estimatedDuration && status === 'in_progress' && (
-              <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                预计 {estimatedDuration}
-              </span>
-            )}
-            {status === 'completed' && (
-              <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
-                已完成
-              </span>
-            )}
           </div>
 
-          <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                实际完成了什么 *
-              </label>
-              <textarea
-                value={outcome}
-                onChange={(e) => setOutcome(e.target.value)}
-                disabled={status === 'pending'}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none disabled:bg-gray-100"
-                rows={3}
-                placeholder="例如：&#10;✓ 完成了登录表单&#10;✓ 添加了邮箱验证"
-              />
-            </div>
-
-            {status === 'in_progress' && (
-              <button
-                onClick={handleCompleteTask}
-                disabled={loading || !outcome.trim()}
-                className="w-full bg-green-600 text-white py-1.5 text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              <label className="block text-xs font-medium text-gray-700 mb-1">类别</label>
+              <select
+                value={taskCategory}
+                onChange={(e) => setTaskCategory(e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                {loading ? '保存中...' : '✓ 标记完成'}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 阶段 3: 反思 (Check/Act) */}
-        <div className={`bg-white rounded-lg shadow p-4 border-l-4 ${
-          status === 'completed' ? 'border-purple-500' : 'border-gray-300'
-        } ${status !== 'completed' && 'opacity-50'}`}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-800">
-              🤔 反思 (Check/Act)
-            </h2>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                任务反思
-              </label>
-              <textarea
-                value={reflection}
-                onChange={(e) => setReflection(e.target.value)}
-                disabled={status !== 'completed'}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none disabled:bg-gray-100"
-                rows={3}
-                placeholder="例如：&#10;好的：专注度高&#10;改进：减少打扰"
-              />
+                <option value="">选择类别</option>
+                <option value="development">开发</option>
+                <option value="meeting">会议</option>
+                <option value="communication">沟通</option>
+                <option value="documentation">文档</option>
+                <option value="review">评审</option>
+                <option value="learning">学习</option>
+                <option value="other">其他</option>
+              </select>
             </div>
-
-            {status === 'completed' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleSaveReflection}
-                    disabled={loading}
-                    className="flex-1 bg-purple-600 text-white py-1.5 text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                  >
-                    {loading ? '保存中...' : '💾 保存反思'}
-                  </button>
-                  {saveStatus === 'success' && (
-                    <span className="text-xl animate-pulse">✅</span>
-                  )}
-                  {saveStatus === 'error' && (
-                    <span className="text-xl animate-pulse">❌</span>
-                  )}
-                </div>
-                <button
-                  onClick={handleNewTask}
-                  className="w-full bg-gray-600 text-white py-1.5 text-sm rounded-lg hover:bg-gray-700 transition"
-                >
-                  ➕ 新任务
-                </button>
-              </>
-            )}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">优先级</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="high">高</option>
+                <option value="medium">中</option>
+                <option value="low">低</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">预计周期</label>
+              <select
+                value={estimatedDuration}
+                onChange={(e) => setEstimatedDuration(e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">不设置</option>
+                <option value="<1小时">&lt;1小时</option>
+                <option value="半天">半天</option>
+                <option value="1天">1天</option>
+                <option value="2-3天">2-3天</option>
+                <option value="1周">1周</option>
+                <option value=">1周">&gt;1周</option>
+              </select>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* 任务历史切换 - 只显示当天 */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="flex items-center justify-between px-4 py-2">
           <button
-            onClick={() => setShowHistory(!showHistory)}
-            className="text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg px-2 py-1"
+            onClick={handleCreateTask}
+            disabled={creating || !taskTitle.trim()}
+            className="w-full md:w-auto bg-blue-600 text-white py-2 px-6 text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
-            {showHistory ? '📋 隐藏历史' : '📋 查看历史'} ({taskHistory.length})
+            {creating ? '创建中...' : '➕ 添加任务'}
           </button>
+          {createNotice && (
+            <span className={`ml-3 text-sm ${createNotice.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+              {createNotice.type === 'success' ? '✅' : '⚠️'} {createNotice.message}
+            </span>
+          )}
         </div>
-
-        {showHistory && taskHistory.length > 0 && (
-          <div className="border-t border-gray-200 max-h-48 overflow-y-auto p-2">
-            {taskHistory.map((task) => (
-              <div key={task.id} className="text-sm p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-800">{task.task_title}</span>
-                  <span className="text-xs text-gray-500">
-                    {task.time_spent_minutes ? `${task.time_spent_minutes}分钟` : ''}
-                  </span>
-                </div>
-                <div className="text-xs text-gray-600 mt-1 truncate">
-                  {task.outcome}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {showHistory && taskHistory.length === 0 && (
-          <div className="border-t border-gray-200 p-4 text-center text-sm text-gray-500">
-            今天还没有完成的任务
-          </div>
-        )}
       </div>
 
-      {/* 科学提示 */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <h3 className="text-xs font-medium text-blue-800 mb-1">💡 任务级别追踪的好处</h3>
-        <ul className="text-xs text-blue-700 space-y-0.5">
-          <li>• 更精确的时间感知和规划能力</li>
-          <li>• 减少"一天什么都没干"的挫败感</li>
-          <li>• 积累任务完成数据，优化未来估算</li>
-        </ul>
+      {/* 筛选 */}
+      <div className="flex gap-2 flex-wrap">
+        {filterTabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setFilter(tab.key)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+              filter === tab.key ? 'bg-blue-100 text-blue-700' : 'bg-white text-gray-600 hover:bg-gray-100 shadow-sm'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
+
+      {/* 任务列表 */}
+      {loading ? (
+        <div className="text-center text-gray-500 py-8 text-sm">加载任务中...</div>
+      ) : filteredTasks.length === 0 ? (
+        <div className="text-center text-gray-400 py-8 text-sm">
+          {tasks.length === 0 ? '还没有任务，先在上方创建一个吧' : '该分类下暂无任务'}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredTasks.map((task) => (
+            <TaskCard key={task.id} task={task} onChanged={loadTasks} onError={showError} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
