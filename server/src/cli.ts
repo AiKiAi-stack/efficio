@@ -140,7 +140,13 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
   const result: Record<string, unknown> = { ...target };
 
   for (const key in source) {
-    if (source[key] instanceof Object && key in result && result[key] instanceof Object) {
+    // 数组直接覆盖：不做元素级合并
+    // （否则 { ...array } 会把数组展开成数字键对象，allowedOrigins.join 就会崩溃）
+    if (Array.isArray(source[key]) || Array.isArray(result[key])) {
+      if (source[key] !== undefined) {
+        result[key] = source[key];
+      }
+    } else if (source[key] instanceof Object && key in result && result[key] instanceof Object) {
       result[key] = deepMerge(result[key] as Record<string, unknown>, source[key] as Record<string, unknown>);
     } else if (source[key] !== undefined) {
       result[key] = source[key];
@@ -163,7 +169,11 @@ function mergeConfig(
       host: process.env.SERVER_HOST || process.env.HOST,
       env: (process.env.NODE_ENV as 'development' | 'production') || undefined,
       logLevel: (process.env.LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error') || undefined,
-      allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',').filter(Boolean)
+      allowedOrigins: (() => {
+        // 空字符串（compose 传 ALLOWED_ORIGINS= 时）视为未配置，保留默认值
+        const origins = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()).filter(Boolean);
+        return origins && origins.length > 0 ? origins : undefined;
+      })()
     },
     database: {
       mode: (process.env.DATABASE_MODE as DatabaseConfig['mode']) || undefined,
