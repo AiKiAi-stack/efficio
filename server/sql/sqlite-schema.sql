@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS work_records (
     original_text TEXT NOT NULL,
     optimized_text TEXT,
     structured_data TEXT,  -- JSON 字符串
+    jira_key TEXT,  -- 关联的 Jira issue key（可选）
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -117,6 +118,23 @@ CREATE TABLE IF NOT EXISTS optimization_suggestions (
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- Jira Tasks 表 - 存储同步的 Jira 任务（单向拉取）
+CREATE TABLE IF NOT EXISTS jira_tasks (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    jira_key TEXT NOT NULL,
+    summary TEXT,
+    status TEXT,
+    priority TEXT,
+    assignee TEXT,
+    url TEXT,
+    synced_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, jira_key),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_jira_tasks_user ON jira_tasks(user_id);
 
 -- 索引 - 加速查询
 CREATE INDEX IF NOT EXISTS idx_work_records_user_id ON work_records(user_id);

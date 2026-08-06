@@ -1,6 +1,148 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { EnvHttpProxyAgent, fetch as undiciFetch } from 'undici';
 import { configManager } from './config-manager';
 import { getCustomProviderByKey } from './ai-providers';
+
+// ============================================
+// AI 错误分类与用户可读提示
+// ============================================
+
+export type AIErrorType =
+  | 'not_configured'
+  | 'network'
+  | 'timeout'
+  | 'auth'
+  | 'rate_limit'
+  | 'model'
+  | 'invalid_response'
+  | 'unknown';
+
+export interface AIErrorInfo {
+  type: AIErrorType;
+  message: string;
+  hint: string;
+}
+
+export class AIProviderError extends Error {
+  info: AIErrorInfo;
+
+  constructor(info: AIErrorInfo) {
+    super(info.message);
+    this.name = 'AIProviderError';
+    this.info = info;
+  }
+}
+
+export function getProviderDisplayName(provider: string): string {
+  const names: Record<string, string> = {
+    anthropic: 'Anthropic Claude',
+    openai: 'OpenAI',
+    deepseek: 'DeepSeek',
+    zhipu: '智谱 AI',
+    kimi: 'Kimi',
+    nvidia: 'NVIDIA NIM',
+    vllm: 'vLLM',
+    aliyun: '阿里云百炼',
+    volcengine: '火山引擎',
+    minimax: 'MiniMax',
+    openrouter: 'OpenRouter'
+  };
+  return names[provider] || provider;
+}
+
+/**
+ * 将任意错误分类为可读的 AI 错误信息（网络/认证/超时/模型/限流等）
+ */
+export function classifyAIError(error: unknown, provider: string = 'anthropic'): AIErrorInfo {
+  const msg = error instanceof Error ? error.message : String(error);
+  const lower = msg.toLowerCase();
+  const providerName = getProviderDisplayName(provider);
+
+  if (msg.includes('AI Provider 未配置') || lower.includes('missing api key')) {
+    return {
+      type: 'not_configured',
+      message: msg,
+      hint: '尚未配置 API Key：打开「设置」页选择 Provider 并填入 API Key（或编辑 server/.env 后重启服务器）。'
+    };
+  }
+  if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('aborted')
+    || lower.includes('socket hang up') || lower.includes('read econnreset') || lower.includes('deadline exceeded')) {
+    return {
+      type: 'timeout',
+      message: msg,
+      hint: '请求超时：模型响应过慢或网络不稳定，可重试，或在「设置」页更换更快的模型。'
+    };
+  }
+  if (lower.includes('401') || lower.includes('403') || lower.includes('authentication')
+    || lower.includes('invalid api key') || lower.includes('unauthorized') || lower.includes('permission')
+    || lower.includes('forbidden') || lower.includes('api key')) {
+    return {
+      type: 'auth',
+      message: msg,
+      hint: '认证失败：API Key 无效或已过期，请到「设置」页更新。'
+    };
+  }
+  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('too many requests')
+    || lower.includes('quota') || lower.includes('insufficient_quota') || lower.includes('余额')) {
+    return {
+      type: 'rate_limit',
+      message: msg,
+      hint: '限流或额度不足：调用频率过高或账户余额不足，请稍后重试或检查账户额度。'
+    };
+  }
+  if (lower.includes('404') || lower.includes('model not found') || lower.includes('does not exist')
+    || lower.includes('unknown model') || lower.includes('模型不存在')) {
+    return {
+      type: 'model',
+      message: msg,
+      hint: '模型名错误或不可用：请检查「设置」页的模型名称（如 deepseek-chat / qwen-plus / glm-4）。'
+    };
+  }
+  if (lower.includes('fetch failed') || lower.includes('econnrefused') || lower.includes('enotfound')
+    || lower.includes('econnreset') || lower.includes('getaddrinfo') || lower.includes('network')
+    || lower.includes('und_err') || lower.includes('connect') || lower.includes('tls')
+    || lower.includes('certificate') || lower.includes('self signed') || lower.includes('unable to verify')) {
+    return {
+      type: 'network',
+      message: msg,
+      hint: `无法连接到 ${providerName} 的 API：国内网络可能直连不通。可设置 HTTPS_PROXY 环境变量走代理，或在「设置」页切换到国内 Provider（DeepSeek / 智谱 / Kimi / 通义 / 火山引擎）。`
+    };
+  }
+  if (lower.includes('parse') || lower.includes('json')) {
+    return {
+      type: 'invalid_response',
+      message: msg,
+      hint: 'AI 返回内容格式异常，请重试。'
+    };
+  }
+  return {
+    type: 'unknown',
+    message: msg,
+    hint: '未知错误：请查看服务器日志（运行目录 logs/efficio.log）获取详情，或在 GitHub Issues 提交反馈。'
+  };
+}
+
+function toAIError(error: unknown, provider: string): AIProviderError {
+  if (error instanceof AIProviderError) {
+    return error;
+  }
+  return new AIProviderError(classifyAIError(error, provider));
+}
+
+// HTTPS_PROXY / HTTP_PROXY / ALL_PROXY 代理支持（undici EnvHttpProxyAgent 自动读取环境变量）
+function getProxyFetch(): typeof fetch | undefined {
+  const proxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY;
+  if (!proxy) return undefined;
+  try {
+    const agent = new EnvHttpProxyAgent();
+    return ((url: any, init?: any) => undiciFetch(url, { ...(init || {}), dispatcher: agent })) as typeof fetch;
+  } catch {
+    return undefined;
+  }
+}
+
+// AI 请求超时：60 秒（SDK 默认 10 分钟太长，出错时用户等不起）
+const AI_TIMEOUT_MS = 60000;
 
 // 支持多 AI Provider 配置
 interface AIProviderConfig {
@@ -93,6 +235,22 @@ const getProviderConfig = (): AIProviderConfig => {
     }
   };
 
+  // 激活的 Provider 已配置 → 直接使用
+  const active = configs[providerKey];
+  if (active?.apiKey && active.apiKey.trim() !== '') {
+    return { provider: providerKey, ...active } as AIProviderConfig;
+  }
+
+  // 激活的 Provider 未配置 → 回退到第一个已配置的 Provider
+  // （典型场景：用户只设置了 DEEPSEEK_API_KEY，AI_PROVIDER 仍是默认 anthropic，
+  //   此时应直接用 DeepSeek 而不是报「AI 服务未配置」）
+  for (const [key, cfg] of Object.entries(configs)) {
+    if (key === 'vllm') continue; // vllm 的 key 是占位值，需显式选择
+    if (cfg.apiKey && cfg.apiKey.trim() !== '') {
+      return { provider: key, ...cfg } as AIProviderConfig;
+    }
+  }
+
   return { provider: providerKey, ...configs[providerKey] } as AIProviderConfig;
 };
 
@@ -116,7 +274,12 @@ const initAI = () => {
 
   // 初始化 Anthropic 客户端（如果是 anthropic provider）
   if (config.provider === 'anthropic' && apiKey) {
-    _anthropic = new Anthropic({ apiKey });
+    const proxyFetch = getProxyFetch();
+    _anthropic = new Anthropic({
+      apiKey,
+      timeout: AI_TIMEOUT_MS,
+      ...(proxyFetch ? { fetch: proxyFetch } : {})
+    });
     _currentProvider = config;
     _isAiAvailable = true;
     console.log(`✅ AI Provider 已配置：${config.provider} (${config.model})`);
@@ -130,6 +293,17 @@ const initAI = () => {
   }
 };
 
+/**
+ * 重置 AI 模块状态
+ * 配置变更（Settings 保存/激活）后调用，确保下次读取最新配置
+ */
+export function resetAIState(): void {
+  _anthropic = null;
+  _isAiAvailable = false;
+  _currentProvider = null;
+  _initialized = false;
+}
+
 // 懒加载 getter
 export const anthropic: Anthropic | null = null;
 export function getAnthropicClient(): Anthropic | null {
@@ -141,7 +315,12 @@ export function getAnthropicClient(): Anthropic | null {
 
   if (config.provider === 'anthropic' && apiKey) {
     if (!_anthropic) {
-      _anthropic = new Anthropic({ apiKey });
+      const proxyFetch = getProxyFetch();
+      _anthropic = new Anthropic({
+        apiKey,
+        timeout: AI_TIMEOUT_MS,
+        ...(proxyFetch ? { fetch: proxyFetch } : {})
+      });
     }
     return _anthropic;
   }
@@ -168,46 +347,55 @@ export async function generateAIResponse(options: {
   const model = config.model || 'claude-sonnet-4-6';
   const maxTokens = options.maxTokens || 2048;
 
-  // Anthropic Provider
-  if (provider === 'anthropic') {
-    const client = new Anthropic({ apiKey });
-    const message = await client.messages.create({
-      model,
-      max_tokens: maxTokens,
-      system: options.system,
-      messages: [{ role: 'user', content: options.userMessage }]
+  const proxyFetch = getProxyFetch();
+
+  try {
+    // Anthropic Provider
+    if (provider === 'anthropic') {
+      const client = new Anthropic({
+        apiKey,
+        timeout: AI_TIMEOUT_MS,
+        ...(proxyFetch ? { fetch: proxyFetch } : {})
+      });
+      const message = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system: options.system,
+        messages: [{ role: 'user', content: options.userMessage }]
+      });
+      return message.content[0].type === 'text' ? message.content[0].text : '';
+    }
+
+    // OpenAI 兼容 Provider（包括 OpenAI、DeepSeek、Zhipu、Kimi、Nvidia、Aliyun、Volcengine、Minimax、OpenRouter、vLLM）
+    const { OpenAI } = await import('openai');
+    const endpoint = config.apiEndpoint;
+
+    const client = new OpenAI({
+      apiKey,
+      baseURL: endpoint,
+      timeout: AI_TIMEOUT_MS,
+      ...(proxyFetch ? { fetch: proxyFetch } : {})
     });
-    return message.content[0].type === 'text' ? message.content[0].text : '';
+
+    const completion = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: options.system },
+        { role: 'user', content: options.userMessage }
+      ],
+      max_tokens: maxTokens
+    });
+
+    return completion.choices[0]?.message?.content || '';
+  } catch (error) {
+    throw toAIError(error, provider);
   }
-
-  // OpenAI 兼容 Provider（包括 OpenAI、DeepSeek、Zhipu、Kimi、Nvidia、Aliyun、Volcengine、Minimax、OpenRouter、vLLM）
-  const { OpenAI } = await import('openai');
-  const endpoint = config.apiEndpoint;
-
-  const client = new OpenAI({
-    apiKey,
-    baseURL: endpoint
-  });
-
-  const completion = await client.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: options.system },
-      { role: 'user', content: options.userMessage }
-    ],
-    max_tokens: maxTokens
-  });
-
-  return completion.choices[0]?.message?.content || '';
 }
 
 export function isAiAvailable(): boolean {
   initAI();
   const config = getProviderConfig();
-  const fullConfig = configManager.read();
-  const providerKey = config.provider.toUpperCase();
-  const apiKey = fullConfig[`${providerKey}_API_KEY`] || process.env[`${providerKey}_API_KEY` as keyof typeof process.env];
-  return !!apiKey;
+  return !!config.apiKey && config.apiKey.trim() !== '';
 }
 
 // 获取当前配置的 provider 信息
@@ -383,8 +571,9 @@ export function analyzeWithoutAI(text: string): any {
     tools_used: tools.length > 0 ? tools : ['通用工具'],
     tags: tags.length > 0 ? tags : ['work'],
     is_deep_work: isDeepWork,
-    interruptions: Math.floor(Math.random() * 3), // 0-2
-    value_level: valueLevel
+    interruptions: 0, // 未知打断次数（需 AI 分析），不再随机生成假数据
+    value_level: valueLevel,
+    analysis_source: 'rule' // 规则分析结果，非 AI 生成
   };
 }
 
@@ -730,11 +919,19 @@ export function generateWorkInsights(records: any[], taskLogs: any[]): WorkInsig
     improvementAreas.push('保持当前良好状态');
   }
 
-  // 周趋势（简化版本，实际应该按天聚合）
-  const weeklyTrend = records.slice(0, 7).map(r => ({
-    date: new Date(r.created_at).toLocaleDateString('zh-CN'),
-    score: Math.round(Math.random() * 30 + 60) // 简化计算
-  }));
+  // 周趋势：按天聚合真实记录量，归一化为活跃度得分（0-100），不再使用随机数
+  const dailyCounts: Record<string, number> = {};
+  records.forEach(r => {
+    const date = new Date(r.created_at).toLocaleDateString('zh-CN');
+    dailyCounts[date] = (dailyCounts[date] || 0) + 1;
+  });
+  const maxDaily = Math.max(1, ...Object.values(dailyCounts));
+  const weeklyTrend = Object.entries(dailyCounts)
+    .slice(0, 7)
+    .map(([date, count]) => ({
+      date,
+      score: Math.min(100, Math.round((count / maxDaily) * 100))
+    }));
 
   return {
     productivityScore,

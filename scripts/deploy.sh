@@ -102,9 +102,12 @@ download_binary() {
     local arch=$(detect_arch)
     local os=$(detect_os)
     local binary_name="efficio-server-${os}-${arch}"
-    local release_url="https://github.com/YOUR_USERNAME/RecordEvo/releases/latest/download/${binary_name}"
+    # GitHub Releases 直连；国内网络下载失败时可设置 EFFICIO_RELEASE_MIRROR 走镜像
+    # 例如：EFFICIO_RELEASE_MIRROR="https://ghfast.top/" 再运行 --binary
+    local release_url="${EFFICIO_RELEASE_MIRROR:-https://github.com}/AiKiAi-stack/efficio/releases/latest/download/${binary_name}"
 
     log_info "正在下载二进制文件：${binary_name}"
+    log_info "下载地址：${release_url}"
 
     # 创建安装目录
     sudo mkdir -p /opt/efficio
@@ -196,16 +199,16 @@ deploy_from_source() {
     # 进入项目目录
     cd "$(dirname "$0")/.."
 
-    # 安装依赖
+    # 安装依赖（必须装全量依赖：构建需要 tsc/vite 等 devDependencies）
     log_info "正在安装依赖..."
-    npm install --production
+    npm install --no-audit --no-fund
 
     cd server
-    npm install --production
+    npm install --no-audit --no-fund
     npm run build
 
     cd ../client
-    npm install --production
+    npm install --no-audit --no-fund
     npm run build
 
     log_success "源码构建完成"
@@ -230,7 +233,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=${project_dir}/server
-ExecStart=$(command -v node) ${project_dir}/server/dist/index.js
+ExecStart=$(command -v node) ${project_dir}/server/dist/cli.js
 Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
