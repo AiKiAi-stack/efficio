@@ -74,7 +74,7 @@ recordsRouter.post('/', async (req, res) => {
       });
     }
 
-    const { original_text, optimized_text } = req.body;
+    const { original_text, optimized_text, jira_key } = req.body;
 
     if (!original_text) {
       return res.status(400).json({
@@ -120,7 +120,8 @@ recordsRouter.post('/', async (req, res) => {
       user_id: userId,
       original_text,
       optimized_text: optimized_text || null,
-      structured_data: structuredData
+      structured_data: structuredData,
+      jira_key: jira_key || null
     });
 
     if (result.error) throw result.error;

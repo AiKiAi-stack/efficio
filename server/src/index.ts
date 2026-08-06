@@ -12,6 +12,7 @@ import { suggestionsRouter } from './routes/suggestions';
 import { dailyLogsRouter } from './routes/dailyLogs';
 import { taskLogsRouter } from './routes/taskLogs';
 import { settingsRouter } from './routes/settings';
+import { jiraRouter } from './routes/jira';
 import { initCronJobs } from './lib/cron';
 import { initializeDatabase } from './lib/database-new';
 
@@ -68,6 +69,7 @@ app.use('/api/suggestions', suggestionsRouter);
 app.use('/api/daily-logs', dailyLogsRouter);
 app.use('/api/task-logs', taskLogsRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/jira', jiraRouter);
 
 // 生产环境：服务前端静态文件
 if (process.env.NODE_ENV === 'production') {

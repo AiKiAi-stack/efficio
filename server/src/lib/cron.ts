@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { getDatabase } from './database-new';
+import { isJiraConfigured, syncJiraForUser } from './jira';
 
 /**
  * 定时任务服务
@@ -125,11 +126,46 @@ export const monthlyTrendJob = cron.schedule('0 9 1 * *', async () => {
   timezone: 'Asia/Shanghai'
 });
 
+// 每日 9:30 同步 Jira 任务（未配置时自动跳过）
+export const jiraSyncJob = cron.schedule('30 9 * * *', async () => {
+  console.log('[Cron] 运行 Jira 任务同步...');
+
+  try {
+    if (!isJiraConfigured()) {
+      console.log('[Cron] Jira 未配置，跳过同步');
+      return;
+    }
+
+    const db = getDatabase();
+    const { data: users } = await db.select('users', {});
+
+    if (!users || users.length === 0) {
+      console.log('[Cron] 无用户，跳过');
+      return;
+    }
+
+    for (const user of users) {
+      try {
+        const result = await syncJiraForUser(user.id);
+        console.log(`[Cron] 用户 ${user.id} Jira 同步完成：${result.total} 个任务`);
+      } catch (error) {
+        console.error(`[Cron] 用户 ${user.id} Jira 同步失败:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('[Cron] Jira 同步任务失败:', error);
+  }
+}, {
+  scheduled: true,
+  timezone: 'Asia/Shanghai'
+});
+
 // 初始化定时任务
 export function initCronJobs() {
   console.log('[Cron] 初始化定时任务...');
   console.log('[Cron] 周总结任务：每周一 8:00 (Asia/Shanghai)');
   console.log('[Cron] 月趋势任务：每月 1 号 9:00 (Asia/Shanghai)');
+  console.log('[Cron] Jira 同步任务：每天 9:30 (Asia/Shanghai)');
 }
 
 // 停止所有定时任务
@@ -137,4 +173,5 @@ export function stopCronJobs() {
   console.log('[Cron] 停止所有定时任务...');
   weeklySummaryJob.stop();
   monthlyTrendJob.stop();
+  jiraSyncJob.stop();
 }
