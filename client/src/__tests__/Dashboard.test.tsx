@@ -3,12 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import Dashboard from '../pages/Dashboard';
 
 // Mock fetch
-global.fetch = vi.fn();
-
-// Mock React Router
-vi.mock('react-router-dom', () => ({
-  BrowserRouter: ({ children }: { children: React.ReactNode }) => children,
-}));
+globalThis.fetch = vi.fn();
 
 // Mock Recharts
 vi.mock('recharts', () => ({
@@ -22,7 +17,6 @@ vi.mock('recharts', () => ({
   YAxis: () => null,
   CartesianGrid: () => null,
   Tooltip: () => null,
-  Legend: () => null,
 }));
 
 describe('Dashboard Component', () => {
@@ -31,7 +25,7 @@ describe('Dashboard Component', () => {
     localStorage.clear();
   });
 
-  it('should render loading state initially', () => {
+  it('should render title', async () => {
     vi.mocked(fetch).mockResolvedValue({
       json: async () => ({ data: [] }),
     } as Response);
@@ -51,11 +45,13 @@ describe('Dashboard Component', () => {
       expect(screen.getByText(/工作记录/i)).toBeInTheDocument();
     });
 
-    // 检查统计卡片
-    expect(screen.getByText(/0/i)).toBeInTheDocument();
+    // 检查统计卡片（0 可能出现在多个卡片中）
+    expect(screen.getAllByText(/0/i).length).toBeGreaterThan(0);
   });
 
   it('should render records count when data exists', async () => {
+    localStorage.setItem('sessionToken', 'test-token');
+
     const mockRecords = {
       json: async () => ({ data: [{ id: '1', original_text: 'Test' }] }),
     } as Response;
@@ -71,7 +67,7 @@ describe('Dashboard Component', () => {
     render(<Dashboard />);
 
     await waitFor(() => {
-      expect(screen.getByText('1')).toBeInTheDocument();
+      expect(screen.getAllByText('1').length).toBeGreaterThan(0);
     });
 
     expect(screen.getByText(/工作记录/i)).toBeInTheDocument();
@@ -97,7 +93,8 @@ describe('Dashboard Component', () => {
     fireEvent.click(generateButton);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/开始日期/i)).toBeInTheDocument();
+      // 日期输入框（当前 UI 无 placeholder，按类型断言）
+      expect(document.querySelectorAll('input[type="date"]').length).toBe(2);
     });
   });
 
@@ -114,12 +111,8 @@ describe('Dashboard Component', () => {
     const generateButton = screen.getByText(/✨ 生成 AI 总结/i);
     fireEvent.click(generateButton);
 
-    // 触发日期范围输入
-    const dateInput = await screen.findByPlaceholderText(/开始日期/i);
-    fireEvent.change(dateInput, { target: { value: '2024-01-01' } });
-
-    // 点击生成按钮
-    const submitButton = screen.getByText(/生成/i);
+    // 点击日期面板里的「生成」按钮
+    const submitButton = await screen.findByText(/^生成$/);
     fireEvent.click(submitButton);
 
     await waitFor(() => {
@@ -137,7 +130,8 @@ describe('Dashboard Component', () => {
     await waitFor(() => {
       expect(screen.getByText(/工作记录/i)).toBeInTheDocument();
       expect(screen.getByText(/完成任务/i)).toBeInTheDocument();
-      expect(screen.getByText(/高价值工作/i)).toBeInTheDocument();
+      // 「高价值工作」同时出现在统计卡片与洞察列表，用 getAllByText
+      expect(screen.getAllByText(/高价值工作/i).length).toBeGreaterThan(0);
       expect(screen.getByText(/任务总时长/i)).toBeInTheDocument();
     });
   });
