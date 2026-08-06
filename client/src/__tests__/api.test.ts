@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock fetch API
-global.fetch = vi.fn();
+globalThis.fetch = vi.fn();
 
 describe('API Module', () => {
   beforeEach(() => {

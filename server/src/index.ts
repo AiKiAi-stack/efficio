@@ -126,8 +126,12 @@ if (process.env.NODE_ENV === 'production') {
       fallthrough: false
     }));
 
-    // SPA fallback - 所有非 API 请求返回 index.html
-    app.get('*', (req, res) => {
+    // SPA fallback - 所有非 API 的 GET 请求返回 index.html
+    // 用中间件而非 app.get('*')：Express 5 的 path-to-regexp 不再支持 '*' 通配符
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api/')) {
+        return next();
+      }
       res.sendFile(path.join(clientDist, 'index.html'));
     });
   } else {
