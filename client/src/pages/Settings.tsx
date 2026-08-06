@@ -59,6 +59,13 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [activatingProvider, setActivatingProvider] = useState<string | null>(null);
 
+  // 内联反馈（替代 alert）
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const showNotice = (type: 'success' | 'error', message: string) => {
+    setNotice({ type, message });
+    setTimeout(() => setNotice(null), 6000);
+  };
+
   // 自定义 Provider 相关状态
   const [showCustomProviderForm, setShowCustomProviderForm] = useState(false);
   const [customProviderForm, setCustomProviderForm] = useState<CustomProviderForm>({
@@ -144,7 +151,7 @@ export default function Settings() {
       const data = await res.json();
 
       if (data.success) {
-        alert(editingCustomProviderId ? '自定义 Provider 已更新' : '自定义 Provider 已添加');
+        showNotice('success', editingCustomProviderId ? '自定义 Provider 已更新' : '自定义 Provider 已添加');
         setShowCustomProviderForm(false);
         setCustomProviderForm({
           name: '',
@@ -158,10 +165,10 @@ export default function Settings() {
         setEditingCustomProviderId(null);
         loadProviders();
       } else {
-        alert('错误：' + data.error);
+        showNotice('error', data.error || '操作失败');
       }
     } catch (error: any) {
-      alert('保存失败：' + error.message);
+      showNotice('error', '保存失败：' + error.message);
     } finally {
       setSavingCustomProvider(false);
     }
@@ -196,13 +203,13 @@ export default function Settings() {
       const data = await res.json();
 
       if (data.success) {
-        alert('自定义 Provider 已删除');
+        showNotice('success', '自定义 Provider 已删除');
         loadProviders();
       } else {
-        alert('删除失败：' + data.error);
+        showNotice('error', data.error || '删除失败');
       }
     } catch (error: any) {
-      alert('删除失败：' + error.message);
+      showNotice('error', '删除失败：' + error.message);
     }
   };
 
@@ -273,7 +280,7 @@ export default function Settings() {
     if (!selectedProvider) return;
 
     if (!config.apiKey.trim()) {
-      alert('请输入 API Key');
+      showNotice('error', '请输入 API Key');
       return;
     }
 
@@ -290,13 +297,13 @@ export default function Settings() {
       const data = await res.json();
 
       if (data.success) {
-        alert('配置已保存');
+        showNotice('success', '配置已保存，已自动切换为当前 Provider');
         loadProviders();
       } else {
-        alert('错误: ' + data.error);
+        showNotice('error', data.error || '保存失败');
       }
     } catch (error: any) {
-      alert('保存失败: ' + error.message);
+      showNotice('error', '保存失败：' + error.message);
     } finally {
       setSaving(false);
     }
@@ -312,19 +319,21 @@ export default function Settings() {
       const data = await res.json();
 
       if (data.success) {
-        alert(data.message);
+        showNotice('success', data.message || '已切换');
         loadProviders();
       } else {
-        alert('错误: ' + data.error);
+        showNotice('error', data.error || '激活失败');
       }
     } catch (error: any) {
-      alert('激活失败: ' + error.message);
+      showNotice('error', '激活失败：' + error.message);
     } finally {
       setActivatingProvider(null);
     }
   };
 
   const selected = providers.find(p => p.key === selectedProvider);
+  const currentProvider = providers.find(p => p.isCurrent);
+  const configuredCount = providers.filter(p => p.isConfigured).length;
 
   const getBorderClass = (provider: Provider) => {
     if (selectedProvider === provider.key) return 'border-blue-500 bg-blue-50';
@@ -343,11 +352,48 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
+      {/* 内联反馈（替代 alert） */}
+      {notice && (
+        <div className={`px-4 py-3 rounded-lg text-sm border ${
+          notice.type === 'success'
+            ? 'bg-green-50 border-green-200 text-green-800'
+            : 'bg-red-50 border-red-200 text-red-700'
+        }`}>
+          {notice.type === 'success' ? '✅' : '⚠️'} {notice.message}
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">AI Provider 设置</h2>
         <p className="text-sm text-gray-600 mb-6">
           配置 AI Provider 以启用 AI 总结、AI 优化等功能。
         </p>
+
+        {/* 配置状态摘要 */}
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+            <div className="text-xs text-gray-500">当前使用</div>
+            <div className="text-sm font-medium text-gray-800 mt-0.5">
+              {currentProvider ? currentProvider.name : '未配置'}
+            </div>
+          </div>
+          <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+            <div className="text-xs text-gray-500">已配置</div>
+            <div className="text-sm font-medium text-gray-800 mt-0.5">
+              {configuredCount} 个 Provider
+            </div>
+          </div>
+          <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+            <div className="text-xs text-gray-500">AI 功能</div>
+            <div className="text-sm font-medium mt-0.5">
+              {currentProvider ? (
+                <span className="text-green-700">✅ 可用</span>
+              ) : (
+                <span className="text-amber-600">⚠️ 未配置，AI 分析/总结将降级</span>
+              )}
+            </div>
+          </div>
+        </div>
 
         <div className="flex gap-6">
           {/* Left: Provider List */}
