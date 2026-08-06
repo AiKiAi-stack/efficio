@@ -11,6 +11,7 @@ import {
   validateProviderConfig
 } from '../lib/ai-providers';
 import { updateProviderConfig, configManager } from '../lib/config-manager';
+import { resetAIState } from '../lib/ai';
 
 export const settingsRouter = Router();
 
@@ -176,6 +177,9 @@ settingsRouter.post('/ai-providers/:provider/config', async (req, res) => {
       });
     }
 
+    // 重置 AI 模块状态，让新配置立即生效
+    resetAIState();
+
     res.json({
       success: true,
       message: '配置已保存。如需启用，请重启服务器或设置为当前 Provider。'
@@ -223,6 +227,9 @@ settingsRouter.post('/ai-providers/:provider/activate', async (req, res) => {
     // 设置为当前 Provider
     configManager.set('AI_PROVIDER', provider);
     process.env.AI_PROVIDER = provider;
+
+    // 重置 AI 模块状态，让切换立即生效
+    resetAIState();
 
     res.json({
       success: true,

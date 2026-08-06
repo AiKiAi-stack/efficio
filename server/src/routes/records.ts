@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDatabase } from '../lib/database-new';
-import { generateAIResponse, analyzeWithoutAI, isAiAvailable } from '../lib/ai';
+import { generateAIResponse, analyzeWithoutAI, isAiAvailable, classifyAIError } from '../lib/ai';
 
 export const recordsRouter = Router();
 
@@ -86,6 +86,7 @@ recordsRouter.post('/', async (req, res) => {
     // 使用优化后的文本进行 AI 分析
     const textToAnalyze = optimized_text || original_text;
     let structuredData = null;
+    let analysisWarning: any = null;
 
     try {
       if (isAiAvailable()) {
@@ -106,13 +107,21 @@ recordsRouter.post('/', async (req, res) => {
 
         structuredData = JSON.parse(jsonStr);
       } else {
-        // 降级模式：使用规则分析
+        // 降级模式：使用规则分析（明确标记来源，不再静默降级）
         structuredData = analyzeWithoutAI(textToAnalyze);
         console.log('使用降级模式分析:', structuredData);
+        analysisWarning = {
+          degraded: true,
+          reason: classifyAIError(new Error('AI Provider 未配置'), 'anthropic')
+        };
       }
     } catch (e) {
       console.warn('AI 分析失败，使用降级模式:', e);
       structuredData = analyzeWithoutAI(textToAnalyze);
+      analysisWarning = {
+        degraded: true,
+        reason: (e as any)?.info || classifyAIError(e)
+      };
     }
 
     const db = getDatabase();
@@ -127,7 +136,8 @@ recordsRouter.post('/', async (req, res) => {
 
     res.json({
       success: true,
-      data: result.data
+      data: result.data,
+      analysis_warning: analysisWarning
     });
   } catch (error) {
     console.error('Create record error:', error);

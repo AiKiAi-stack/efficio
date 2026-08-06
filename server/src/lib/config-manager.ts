@@ -6,6 +6,32 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
+
+/**
+ * 默认配置文件路径（固定，不随启动目录变化）
+ * 可通过 EFFICIO_ENV_FILE 环境变量覆盖
+ */
+export function getDefaultEnvFilePath(): string {
+  return process.env.EFFICIO_ENV_FILE || path.join(os.homedir(), '.config', 'efficio', 'efficio.env');
+}
+
+/**
+ * 迁移旧配置：如果新路径不存在但启动目录下有 .env，一次性复制过来
+ */
+function migrateLegacyEnvFile(targetPath: string): void {
+  const legacyPath = path.resolve(process.cwd(), '.env');
+  if (legacyPath === targetPath || !fs.existsSync(legacyPath)) {
+    return;
+  }
+  try {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.copyFileSync(legacyPath, targetPath);
+    console.log(`✅ 已将旧配置文件从 ${legacyPath} 迁移到 ${targetPath}`);
+  } catch (error) {
+    console.warn('旧配置迁移失败（可忽略）:', error);
+  }
+}
 
 /**
  * 解析 .env 文件内容
@@ -74,7 +100,7 @@ export class ConfigManager {
   private readonly CACHE_TTL = 5000; // 5 秒缓存
 
   constructor(envFilePath?: string) {
-    this.envFilePath = envFilePath || path.resolve(process.cwd(), '.env');
+    this.envFilePath = envFilePath || getDefaultEnvFilePath();
   }
 
   /**
@@ -88,6 +114,10 @@ export class ConfigManager {
     }
 
     try {
+      if (!fs.existsSync(this.envFilePath)) {
+        // 一次性迁移旧配置（启动目录下的 .env）
+        migrateLegacyEnvFile(this.envFilePath);
+      }
       if (!fs.existsSync(this.envFilePath)) {
         this.cache = {};
         this.cacheTimestamp = now;
@@ -110,6 +140,9 @@ export class ConfigManager {
    */
   write(config: Record<string, string>): boolean {
     try {
+      // 确保目录存在
+      fs.mkdirSync(path.dirname(this.envFilePath), { recursive: true });
+
       const content = stringifyEnvFile(config);
       fs.writeFileSync(this.envFilePath, content, 'utf-8');
 
