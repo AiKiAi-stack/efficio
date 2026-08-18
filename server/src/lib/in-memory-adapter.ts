@@ -30,11 +30,13 @@ function matches(item: any, where?: Record<string, any>): boolean {
       const c = condition as Record<string, any>;
       const itemVal = item[key];
       const itemTime = () => new Date(itemVal).getTime();
-      if ('eq' in c) return itemVal === c.eq;
-      if ('gt' in c) return itemTime() > new Date(c.gt).getTime();
-      if ('gte' in c) return itemTime() >= new Date(c.gte).getTime();
-      if ('lt' in c) return itemTime() < new Date(c.lt).getTime();
-      if ('lte' in c) return itemTime() <= new Date(c.lte).getTime();
+      // 多操作符条件需同时满足（AND），与 SQLite 适配器的 WHERE ... AND ... 一致；
+      // 早期实现命中第一个操作符即返回，导致 { gte, lt } 只应用 gte
+      if ('eq' in c && itemVal !== c.eq) return false;
+      if ('gt' in c && !(itemTime() > new Date(c.gt).getTime())) return false;
+      if ('gte' in c && !(itemTime() >= new Date(c.gte).getTime())) return false;
+      if ('lt' in c && !(itemTime() < new Date(c.lt).getTime())) return false;
+      if ('lte' in c && !(itemTime() <= new Date(c.lte).getTime())) return false;
       return true;
     }
     return item[key] === condition;
