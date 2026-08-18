@@ -5,6 +5,42 @@ Efficio 仓库的长期工程记忆。每轮自主迭代的重要发现、根因
 
 ---
 
+## 2026-08-19 · feat: cron 报告生成落地 + 三个日期/查询 bug（commit 36fda05）
+
+### 发现
+1. cron 周/月任务是**存根**：只打日志"有待生成的周总结"，从不生成。
+   README 宣称 Phase 3/4（周报/月报）已完成。
+2. 月趋势 12 月 bug：`endDate = Math.min(month+1, 12)` → 12 月区间
+   [12-01, 12-01) 恒空，12 月永远 404。
+3. 周总结漏周日：`lt: week_end` 排除周日整天。
+4. **InMemoryAdapter.matches() 多操作符 bug**：if 链命中第一个操作符即返回，
+   `{ gte, lt }` 只应用 gte —— 内存模式（DATABASE_MODE=memory 与测试惰性 DB）
+   所有范围查询上界失效；SQLite 适配器是 AND 语义，两适配器行为分叉。
+
+### 决策
+- 生成逻辑提取为 `lib/report-generator.ts`（路由与 cron 共用）；
+  cron 用 `skipIfExists: true` 幂等，路由保持可重复生成（upsert）。
+- 周范围改含首尾（lte weekEnd 23:59:59.999Z）；月边界正确处理跨年。
+- matches() 改为全操作符 AND；月趋势补降级生成（原来 AI 缺失时存空）。
+- 测试 mock `isAiAvailable` 为 false：开发机 shell 导出了 DEEPSEEK_API_KEY，
+  不 mock 会走真实 AI 请求。
+
+### 验证
+report-generator.test.ts 15 例；server jest 148/148、client 17/17、tsc 通过。
+
+### 后续
+- `/summaries/weekly/generate`、`/trends/monthly*` 端点当前无前端消费
+  （Dashboard 用 /summaries/range）；如未来 UI 接回，注意 week_end 为含当日。
+
+---
+
+## 2026-08-19 · chore: client api.ts 死代码清理（commit 5855497）
+
+删除 11 个从未被调用的 API 函数（仅保留 getUserId/login）。这些死函数沿用
+"token 直接作 X-User-Id"的已修复错误模式，存在被误用重新引入 bug 的风险。
+
+---
+
 ## 2026-08-19 · fix: 全路由越权审计（commit fe1e333）
 
 ### 发现
