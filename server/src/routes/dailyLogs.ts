@@ -75,6 +75,11 @@ dailyLogsRouter.post('/', async (req, res) => {
     let savedLog;
 
     if (existing) {
+      // 客户端补丁保存可能不回传时间字段：继承已有值，
+      // 避免重置开始时间或清空完成时间
+      if (req.body.start_time === undefined) logData.start_time = existing.start_time;
+      if (req.body.end_time === undefined) logData.end_time = existing.end_time;
+
       const { data, error } = await db.update('daily_logs', existing.id, logData);
       if (error) throw error;
       savedLog = data;

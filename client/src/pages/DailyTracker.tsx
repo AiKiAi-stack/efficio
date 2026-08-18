@@ -13,6 +13,7 @@ export default function DailyTracker() {
   const [energyLevel, setEnergyLevel] = useState('medium');
 
   const [startTime, setStartTime] = useState<Date | null>(null);
+  const [endTime, setEndTime] = useState<string | null>(null);
   const [isStarted, setIsStarted] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
 
@@ -46,6 +47,7 @@ export default function DailyTracker() {
           setIsStarted(true);
         }
         if (log.end_time) {
+          setEndTime(log.end_time);
           setIsCompleted(true);
         }
       }
@@ -120,6 +122,7 @@ export default function DailyTracker() {
 
       const data = await res.json();
       if (data.data) {
+        setEndTime(now);
         setIsCompleted(true);
       }
     } catch (error) {
@@ -144,7 +147,8 @@ export default function DailyTracker() {
           accomplishments,
           reflection,
           start_time: startTime?.toISOString(),
-          end_time: isCompleted ? new Date().toISOString() : null,
+          // 保留原始完成时间；重新取 now 会让 end_time 随每次保存漂移
+          end_time: isCompleted ? endTime : null,
           mood_score: moodScore,
           energy_level: energyLevel
         })
