@@ -5,6 +5,28 @@ Efficio 仓库的长期工程记忆。每轮自主迭代的重要发现、根因
 
 ---
 
+## 2026-08-19 · ci: 测试门禁 + lint 修复（commit 8602b3e）
+
+### 发现
+- CI 只有 main 的二进制打包工作流，**无任何测试门禁**。
+- 根/server/client 三处 `lint` 脚本全部损坏：client 有 eslint 依赖但无配置；
+  server 与根连 eslint 依赖都没有，运行必然失败。
+
+### 决策
+- 新增 ci.yml：所有分支 push/PR 跑 server jest+tsc、client vitest+eslint+build。
+- client 补 .eslintrc.cjs（Vite 模板规则）；any/未用变量设 warn。
+- 根 lint 委托 client；删除 server 必然失败的 lint 脚本。
+
+### 验证
+CI 各步骤本地全部跑通（148 server 测试、17 client 测试、eslint 0 errors、双构建）。
+
+### 后续
+- 首次真实 CI 运行关注 better-sqlite3 预编译二进制是否可用。
+- **本地分支 feat/multi-task-tracker 领先远端 8 个提交未推送**（本机 GitHub
+  网络受限；push/合并 main 需用户确认后在网络可用环境执行）。
+
+---
+
 ## 2026-08-19 · feat: cron 报告生成落地 + 三个日期/查询 bug（commit 36fda05）
 
 ### 发现
