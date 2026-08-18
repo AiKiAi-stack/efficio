@@ -135,11 +135,34 @@ describe('Records Routes', () => {
 
       // 获取单条记录
       const getResponse = await request(app)
-        .get(`/api/records/${recordId}`);
+        .get(`/api/records/${recordId}`)
+        .set('x-user-id', TEST_USER_ID);
 
       expect(getResponse.status).toBe(200);
       expect(getResponse.body.data.id).toBe(recordId);
       expect(getResponse.body.data.original_text).toBe('Single record test');
+    });
+
+    it('should return 401 when user ID is missing', async () => {
+      const response = await request(app).get('/api/records/any-id');
+
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should not return another user\'s record', async () => {
+      const createResponse = await request(app)
+        .post('/api/records')
+        .set('x-user-id', TEST_USER_ID)
+        .send({ original_text: 'Private record' });
+
+      const recordId = createResponse.body.data.id;
+
+      const getResponse = await request(app)
+        .get(`/api/records/${recordId}`)
+        .set('x-user-id', 'another-user');
+
+      expect(getResponse.status).toBe(404);
     });
   });
 
@@ -155,25 +178,57 @@ describe('Records Routes', () => {
 
       // 删除记录
       const deleteResponse = await request(app)
-        .delete(`/api/records/${recordId}`);
+        .delete(`/api/records/${recordId}`)
+        .set('x-user-id', TEST_USER_ID);
 
       expect(deleteResponse.status).toBe(200);
       expect(deleteResponse.body.success).toBe(true);
 
       // 验证已删除
       const getResponse = await request(app)
-        .get(`/api/records/${recordId}`);
+        .get(`/api/records/${recordId}`)
+        .set('x-user-id', TEST_USER_ID);
 
-      // 应该返回空或错误
-      expect(getResponse.body.data).toBeNull();
+      expect(getResponse.status).toBe(404);
     });
 
-    it('should handle deleting non-existent record', async () => {
-      const deleteResponse = await request(app)
-        .delete('/api/records/non-existent-id');
+    it('should return 401 when user ID is missing', async () => {
+      const response = await request(app).delete('/api/records/any-id');
 
-      expect(deleteResponse.status).toBe(200);
-      expect(deleteResponse.body.success).toBe(true);
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should return 404 when deleting non-existent record', async () => {
+      const deleteResponse = await request(app)
+        .delete('/api/records/non-existent-id')
+        .set('x-user-id', TEST_USER_ID);
+
+      expect(deleteResponse.status).toBe(404);
+      expect(deleteResponse.body.success).toBe(false);
+    });
+
+    it('should not delete another user\'s record', async () => {
+      const createResponse = await request(app)
+        .post('/api/records')
+        .set('x-user-id', TEST_USER_ID)
+        .send({ original_text: 'Protected record' });
+
+      const recordId = createResponse.body.data.id;
+
+      const deleteResponse = await request(app)
+        .delete(`/api/records/${recordId}`)
+        .set('x-user-id', 'another-user');
+
+      expect(deleteResponse.status).toBe(404);
+
+      // 原用户仍能读取
+      const getResponse = await request(app)
+        .get(`/api/records/${recordId}`)
+        .set('x-user-id', TEST_USER_ID);
+
+      expect(getResponse.status).toBe(200);
+      expect(getResponse.body.data.original_text).toBe('Protected record');
     });
   });
 });

@@ -171,9 +171,31 @@ ${recentSummaries.map(s => s.markdown_content).join('\n\n')}` : ''}`,
 // 标记建议为已执行
 suggestionsRouter.patch('/:id/action', async (req, res) => {
   try {
+    const userId = req.headers['x-user-id'] as string;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: '未授权'
+      });
+    }
+
     const { id } = req.params;
 
     const db = getDatabase();
+
+    // 校验所有权，防止越权修改他人建议
+    const { data: existing } = await db.selectSingle('optimization_suggestions', {
+      where: { id, user_id: userId }
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        error: '建议不存在'
+      });
+    }
+
     const result = await db.update('optimization_suggestions', id, { is_actioned: true });
 
     if (result.error) throw result.error;
