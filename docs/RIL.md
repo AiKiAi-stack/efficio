@@ -5,6 +5,45 @@ Efficio 仓库的长期工程记忆。每轮自主迭代的重要发现、根因
 
 ---
 
+## 2026-08-19 · fix: 全路由越权审计（commit fe1e333）
+
+### 发现
+- `records.ts` GET /:id、DELETE /:id **完全无鉴权**：匿名可读/删任意用户工作记录。
+- `suggestions.ts` PATCH /:id/action 无鉴权，可篡改任意用户建议状态。
+- 审计通过：dailyLogs / summaries / trends 的更新均先用
+  `where: { user_id, ... }` 定位既有记录再按内部 id 更新，无 IDOR。
+- settings 路由是服务器级配置（config-manager，非按用户的 DB 数据），
+  属于部署管理面，未纳入用户隔离。
+
+### 决策
+- 单条接口统一模式：X-User-Id 缺失 → 401；按 (id, user_id) 查无 → 404。
+- DELETE 不存在记录语义从 200/success 改为 404（grep 确认 Web/CLI 均无消费方）。
+
+### 验证
+server jest 133/133（新增 records 4 例 + suggestions.test.ts 4 例），tsc 通过。
+
+### 后续
+- records 删除、suggestions action 目前无任何客户端消费（死端点），
+  后续如前端要接入需注意 401/404 处理。
+
+---
+
+## 2026-08-19 · fix: TaskTracker 计时不刷新（commit 6ace6ef）
+
+### 发现
+多任务重写宣称"进行中实时计时"，但 `elapsedSince` 只在渲染时计算，
+无定时器 → 页面静止时计时永远停在初始值。
+
+### 决策
+存在进行中任务时每 30 秒强制重渲染（无进行中任务不启动定时器）。
+显示粒度为分钟，30s 滞后可接受。
+
+### 验证
+新增 `client/src/__tests__/TaskTracker.test.tsx`（5 例，含 fake-timers
+计时回归：5 分钟 → 推进 90s → 6 分钟）。client vitest 17/17、build 通过。
+
+---
+
 ## 2026-08-19 · fix: task-logs 计时数据丢失 + IDOR（commit b000df3）
 
 ### 发现
@@ -37,11 +76,11 @@ Efficio 仓库的长期工程记忆。每轮自主迭代的重要发现、根因
 ### 已知风险 / 后续
 - update 语义从"全量覆盖"变为"未提供字段继承"。当前客户端（Web、CLI）
   均不依赖显式置 null，安全；新增客户端时需注意。
-- 待办：TaskTracker 进行中任务的"已进行 X 分钟"仅在重渲染时更新，
-  无定时器（前端 UX 缺陷，计划下一轮修复）。
+- ~~待办：计时不刷新~~ → 已在 6ace6ef 修复。
+- ~~待办：其他路由 IDOR 审计~~ → 已完成（fe1e333），records/suggestions 已修。
 - 待办：根 `package.json` 有 `lint` 脚本但仓库无 eslint 配置，属技术债。
-- 待办：task-logs 之外其他路由（records、dailyLogs、summaries 等）
-  是否存在同类 IDOR/覆盖问题，尚未全面审计。
+- 待办：`client/src/api.ts` 除 login/getUserId 外 11 个函数为死代码，
+  且沿用已被修复的 sessionToken 传参模式，存在被误用重新引入 bug 的风险。
 
 ### 环境事实
 - 分支 feat/multi-task-tracker（领先本地 main 数个提交；远端 PR #21 已合并）。
