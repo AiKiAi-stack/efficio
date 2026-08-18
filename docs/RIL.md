@@ -27,6 +27,41 @@ CI 各步骤本地全部跑通（148 server 测试、17 client 测试、eslint 0
 
 ---
 
+## 2026-08-19 · fix: Jira 401 + 日志时间漂移（commit ef33722）
+
+- JiraPage 的 /jira/tasks、/jira/sync 从未发送 X-User-Id → 同步功能完全不可用。
+- DailyTracker 保存反思用 new Date() 覆盖 end_time → 完成时间漂移；
+  server dailyLogs 同步补上"未回传字段继承"（同 task-logs 模式）。
+- 测试：daily-logs.test.ts 5 例 + DailyTracker.test.tsx 2 例。
+
+## 2026-08-19 · fix: CLI --init 覆盖配置 + 启动横幅崩溃（commit d749277）
+
+- `config --init` 静默覆盖已有 efficio.json → 改为拒绝（exit 1）。
+- printStartupInfo：turso/supabase URL 未配置显示 "undefined..."；
+  Cron 行 weeklySummary 为 null 时 TypeError。
+
+## 2026-08-19 · fix: UTC 日期误用致日历跳错月（commit 9b67584）
+
+- RecordsHistory 日历 5 处 + Dashboard 今日总结用 toISOString().split('T')[0]
+  取 UTC 日期：UTC+8 凌晨翻月跳错月、"今天"差一天。改为本地日期格式化。
+- RecordsHistory.test.tsx 用 fake timers 固定本地 00:30 验证逐月翻页。
+- **注意**：server 端 daily-logs 的 log_date 仍按 UTC（toISOString）划分，
+  GET/POST 一致暂未改；如按本地日界需统一设计后处理。
+
+---
+
+## 会话总结（2026-08-19，9 轮修复 + 3 次 RIL 提交）
+
+- 修复 12+ 个 bug：2 个安全（IDOR/无鉴权）、3 个数据丢失/漂移、
+  3 个日期边界（12 月空区间、漏周日、UTC 误用）、适配器语义分叉、
+  cron 存根、Jira 同步不可用、CLI 覆盖配置、计时不刷新等。
+- 新增测试 53 个（server 114→153、client 12→21），建立 CI 测试门禁。
+- 全库代码审计完成：路由、适配器、lib、CLI、全部 8 个前端页面。
+- 遗留（低优先级/需人工）：分支未推送（网络）、settings 用户隔离（架构决策）、
+  daily-logs 本地日界、20 个 eslint warning、uitemplate/selectModel.png。
+
+---
+
 ## 2026-08-19 · feat: cron 报告生成落地 + 三个日期/查询 bug（commit 36fda05）
 
 ### 发现
