@@ -365,16 +365,19 @@ function printStartupInfo(config: EfficioConfig) {
   if (config.database.mode === 'sqlite') {
     console.log(`║    Path:        ${config.database.sqlitePath.padEnd(34)}║`);
   } else if (config.database.mode === 'turso') {
-    const urlDisplay = config.database.tursoUrl?.substring(0, 30) + '...' || 'N/A';
+    const urlDisplay = config.database.tursoUrl ? config.database.tursoUrl.substring(0, 30) + '...' : 'N/A';
     console.log(`║    URL:         ${urlDisplay.padEnd(34)}║`);
   } else if (config.database.mode === 'supabase') {
-    const urlDisplay = config.database.supabaseUrl?.substring(0, 30) + '...' || 'N/A';
+    const urlDisplay = config.database.supabaseUrl ? config.database.supabaseUrl.substring(0, 30) + '...' : 'N/A';
     console.log(`║    URL:         ${urlDisplay.padEnd(34)}║`);
   }
   console.log(`║                                                       ║`);
   console.log(`║  AI Provider                                          ║`);
   console.log(`║    Active:      ${config.ai.provider.padEnd(34)}║`);
-  console.log(`║    Cron:        ${config.cron.enabled ? 'Enabled' : 'Disabled'} ${config.cron.enabled ? '(' + config.cron.weeklySummary + ')' : ''} ${' '.repeat(Math.max(0, 34 - (config.cron.enabled ? 10 + config.cron.weeklySummary!.length : 0)))}║`);
+  const cronText = config.cron.enabled
+    ? `Enabled (${config.cron.weeklySummary || 'default'})`
+    : 'Disabled';
+  console.log(`║    Cron:        ${cronText.padEnd(34)}║`);
   console.log('╚═══════════════════════════════════════════════════════╝');
   console.log('');
 }
@@ -466,6 +469,14 @@ program
     // --init: 创建配置文件模板
     if (cmdOptions.init) {
       const targetPath = path.resolve(process.cwd(), 'efficio.json');
+
+      // 已存在时拒绝覆盖，避免静默销毁用户现有配置
+      if (fs.existsSync(targetPath)) {
+        console.error(`✗ Configuration file already exists: ${targetPath}`);
+        console.error('  备份或删除该文件后重试，避免现有配置被覆盖。');
+        process.exit(1);
+      }
+
       const template: Partial<EfficioConfig> = {
         server: {
           port: 3001,
