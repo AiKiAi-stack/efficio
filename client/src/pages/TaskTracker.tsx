@@ -273,6 +273,14 @@ export default function TaskTracker() {
     loadTasks();
   }, []);
 
+  // 存在进行中任务时每 30 秒强制重渲染，保证"已进行 X分钟"实时刷新
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!tasks.some(t => t.status === 'in_progress')) return;
+    const timer = setInterval(() => setTick(n => n + 1), 30_000);
+    return () => clearInterval(timer);
+  }, [tasks]);
+
   const handleCreateTask = async () => {
     if (!taskTitle.trim()) {
       showError('请填写任务标题');
