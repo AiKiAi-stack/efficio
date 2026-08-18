@@ -13,7 +13,6 @@
     "backup:create": "tsx src/scripts/backup-create.ts",
     "backup:upload": "tsx src/scripts/backup-upload.ts",
     "backup:download": "tsx src/scripts/backup-download.ts",
-    "lint": "eslint . --ext .ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
