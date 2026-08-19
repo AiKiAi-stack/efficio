@@ -152,12 +152,28 @@ recordsRouter.post('/', async (req, res) => {
 // 获取单条记录
 recordsRouter.get('/:id', async (req, res) => {
   try {
+    const userId = req.headers['x-user-id'] as string;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: '未授权'
+      });
+    }
+
     const { id } = req.params;
 
     const db = getDatabase();
-    const result = await db.selectSingle('work_records', { where: { id } });
+    const result = await db.selectSingle('work_records', { where: { id, user_id: userId } });
 
     if (result.error) throw result.error;
+
+    if (!result.data) {
+      return res.status(404).json({
+        success: false,
+        error: '记录不存在'
+      });
+    }
 
     res.json({
       success: true,
@@ -175,9 +191,31 @@ recordsRouter.get('/:id', async (req, res) => {
 // 删除记录
 recordsRouter.delete('/:id', async (req, res) => {
   try {
+    const userId = req.headers['x-user-id'] as string;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: '未授权'
+      });
+    }
+
     const { id } = req.params;
 
     const db = getDatabase();
+
+    // 校验所有权后删除，防止越权删除他人记录
+    const { data: existing } = await db.selectSingle('work_records', {
+      where: { id, user_id: userId }
+    });
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        error: '记录不存在'
+      });
+    }
+
     const result = await db.delete('work_records', id);
 
     if (result.error) throw result.error;

@@ -30,11 +30,20 @@ interface TaskLog {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+// 本地日期 YYYY-MM-DD。不能用 toISOString().split('T')[0]：
+// 那是 UTC 日期，UTC+ 时区凌晨到早晨会差一天，日历翻月会跳错月
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export default function RecordsHistory() {
   const userId = getUserId();
 
   // 日期选择状态
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(toLocalDateStr(new Date()));
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [dateRangeMode, setDateRangeMode] = useState(false);
@@ -248,7 +257,7 @@ export default function RecordsHistory() {
           <button
             onClick={() => {
               const newDate = new Date(year, month - 1, 1);
-              setSelectedDate(newDate.toISOString().split('T')[0]);
+              setSelectedDate(toLocalDateStr(newDate));
             }}
             className="px-2 py-1 text-sm hover:bg-gray-100 rounded"
           >
@@ -260,7 +269,7 @@ export default function RecordsHistory() {
           <button
             onClick={() => {
               const newDate = new Date(year, month + 1, 1);
-              setSelectedDate(newDate.toISOString().split('T')[0]);
+              setSelectedDate(toLocalDateStr(newDate));
             }}
             className="px-2 py-1 text-sm hover:bg-gray-100 rounded"
           >
@@ -285,7 +294,7 @@ export default function RecordsHistory() {
             const day = i + 1;
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const isSelected = dateStr === selectedDate;
-            const isToday = dateStr === new Date().toISOString().split('T')[0];
+            const isToday = dateStr === toLocalDateStr(new Date());
 
             return (
               <button
@@ -309,7 +318,7 @@ export default function RecordsHistory() {
         </div>
 
         <button
-          onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+          onClick={() => setSelectedDate(toLocalDateStr(new Date()))}
           className="w-full mt-3 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
         >
           回到今天

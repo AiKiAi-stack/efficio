@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getUserId } from '../api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -50,9 +51,12 @@ export default function JiraPage() {
 
   const load = async () => {
     try {
+      const userId = getUserId();
       const [sRes, tRes] = await Promise.all([
         fetch(`${API_URL}/jira/settings`),
-        fetch(`${API_URL}/jira/tasks`)
+        fetch(`${API_URL}/jira/tasks`, {
+          headers: userId ? { 'X-User-Id': userId } : {}
+        })
       ]);
       const sData = await sRes.json();
       const tData = await tRes.json();
@@ -118,9 +122,17 @@ export default function JiraPage() {
   };
 
   const sync = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      showNotice('error', '会话已过期，请重新登录');
+      return;
+    }
     setSyncing(true);
     try {
-      const res = await fetch(`${API_URL}/jira/sync`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/jira/sync`, {
+        method: 'POST',
+        headers: { 'X-User-Id': userId }
+      });
       const data = await res.json();
       if (data.success) {
         showNotice('success', `同步完成：${data.data.total} 个任务`);

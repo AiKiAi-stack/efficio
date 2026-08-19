@@ -26,6 +26,14 @@ interface TaskLog {
   created_at: string;
 }
 
+// 本地日期 YYYY-MM-DD（toISOString 是 UTC，UTC+ 时区凌晨会差一天）
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 interface TimeDistribution {
   hourlyDistribution: { hour: number; count: number }[];
   peakHours: number[];
@@ -136,7 +144,7 @@ export default function Dashboard() {
     try {
       const body = range
         ? { start_date: range.start, end_date: range.end, enhanced: true }
-        : { date: new Date().toISOString().split('T')[0], enhanced: true };
+        : { date: toLocalDateStr(new Date()), enhanced: true };
 
       const res = await fetch('/api/summaries/range', {
         method: 'POST',

@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { getDatabase } from '../lib/database-new';
+import { generateWeeklySummaryForUser } from '../lib/report-generator';
 import {
   isAiAvailable,
   generateAIResponse,
-  generateWeeklySummaryWithoutAI,
   generateEnhancedSummaryWithoutAI,
   analyzeTimeDistribution,
   generateWorkInsights,
@@ -84,123 +84,20 @@ summariesRouter.post('/weekly/generate', async (req, res) => {
       });
     }
 
-    const db = getDatabase();
+    // 生成逻辑在 report-generator 中与 cron 共用；
+    // week_end 为含当日（服务端按 23:59:59.999 取上界）
+    const result = await generateWeeklySummaryForUser(userId, week_start, week_end);
 
-    // 获取该周的所有记录
-    const { data: records, error: recordsError } = await db.select('work_records', {
-      where: {
-        user_id: userId,
-        created_at: { gte: week_start, lt: week_end }
-      },
-      orderBy: { column: 'created_at', direction: 'ASC' }
-    });
-
-    if (recordsError) throw recordsError;
-
-    if (!records || records.length === 0) {
+    if (result.status === 'no_records') {
       return res.status(404).json({
         success: false,
         error: '该周暂无工作记录'
       });
     }
 
-    let markdownContent = '';
-
-    if (isAiAvailable()) {
-      // 调用 AI 生成周总结
-      const recordsContext = records.map(r => {
-        const structured = r.structured_data ? JSON.stringify(r.structured_data) : '无结构化数据';
-        const content = r.optimized_text || r.original_text;
-        return `- [${new Date(r.created_at).toLocaleDateString('zh-CN')}] ${content}\n  结构化：${structured}`;
-      }).join('\n');
-
-      markdownContent = await generateAIResponse({
-        system: `你是一个专业的效率分析助手。请根据用户本周的工作记录生成周总结报告。
-
-请分析以下维度并生成 Markdown 格式报告：
-
-1. **时间分布** - 按任务类别统计时间占比
-2. **高价值工作** - 识别价值等级为 high 的工作
-3. **深度工作状态** - 统计深度工作次数和占比
-4. **被打断情况** - 分析打断频率
-5. **工具使用情况** - 列出常用工具
-6. **问题分析** - 识别效率低下的模式
-7. **优化建议** - 给出 2-3 条具体可执行的改进建议
-
-报告格式：
-\`\`\`markdown
-# 本周工作分析 (${week_start} ~ ${week_end})
-
-## 📊 时间分布
-[按类别统计时间占比]
-
-## ✨ 高价值工作
-[列出高价值工作及其成果]
-
-## 🎯 深度工作状态
-[深度工作统计]
-
-## ⚠️ 被打断情况
-[打断分析]
-
-## 🛠️ 工具使用
-[工具使用情况]
-
-## 🔍 问题分析
-[识别的效率问题]
-
-## 💡 优化建议
-[具体可执行的改进建议]
-\`\`\`
-
-请直接返回 Markdown 内容，不要解释。`,
-        userMessage: `请根据以下本周工作记录生成周总结报告：\n\n${recordsContext}`,
-        maxTokens: 2048
-      });
-    } else {
-      // 降级模式
-      markdownContent = generateWeeklySummaryWithoutAI(records);
-      console.log('使用降级模式生成周总结');
-    }
-
-    // 抽取结构化数据（用于后续分析）
-    const summaryData = {
-      week_start,
-      week_end,
-      total_records: records.length,
-      generated_at: new Date().toISOString(),
-      records_with_structured_data: records.filter(r => r.structured_data).length
-    };
-
-    // 保存到数据库
-    const { data: existingSummary } = await db.selectSingle('weekly_summaries', {
-      where: { user_id: userId, week_start }
-    });
-
-    let savedSummary;
-
-    if (existingSummary) {
-      const { data, error } = await db.update('weekly_summaries', existingSummary.id, {
-        summary_data: summaryData,
-        markdown_content: markdownContent
-      });
-      if (error) throw error;
-      savedSummary = data;
-    } else {
-      const { data, error } = await db.insert('weekly_summaries', {
-        user_id: userId,
-        week_start,
-        week_end,
-        summary_data: summaryData,
-        markdown_content: markdownContent
-      });
-      if (error) throw error;
-      savedSummary = data;
-    }
-
     res.json({
       success: true,
-      data: savedSummary
+      data: result.data
     });
   } catch (error) {
     console.error('Generate weekly summary error:', error);

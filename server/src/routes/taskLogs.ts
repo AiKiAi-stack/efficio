@@ -89,33 +89,65 @@ taskLogsRouter.post('/', async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
-    // 如果是开始任务，自动设置 start_time
-    if (status === 'in_progress' && !start_time) {
-      taskData.start_time = new Date().toISOString();
-    }
-
-    // 如果是完成任务，自动设置 end_time
-    if (status === 'completed' && !end_time) {
-      taskData.end_time = new Date().toISOString();
-      // 计算花费时间
-      if (taskData.start_time) {
-        const start = new Date(taskData.start_time);
-        const end = new Date(taskData.end_time);
-        taskData.time_spent_minutes = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
-      }
-    }
-
     const db = getDatabase();
 
     let savedLog;
 
     if (req.body.id) {
-      // 更新现有任务
+      // 更新现有任务：先校验所有权，防止越权修改他人任务
+      const { data: existing, error: findError } = await db.selectSingle('task_logs', {
+        where: { id: req.body.id, user_id: userId }
+      });
+      if (findError) throw findError;
+      if (!existing) {
+        return res.status(404).json({ success: false, error: '任务不存在' });
+      }
+
+      // 客户端补丁更新通常不回传时间字段：请求中未提供的字段继承现有值，
+      // 否则全量覆盖会把已有的 start_time/end_time/用时清空
+      if (req.body.start_time === undefined) taskData.start_time = existing.start_time ?? null;
+      if (req.body.end_time === undefined) taskData.end_time = existing.end_time ?? null;
+      if (req.body.time_spent_minutes === undefined) taskData.time_spent_minutes = existing.time_spent_minutes ?? null;
+      if (req.body.tags === undefined) taskData.tags = existing.tags ?? null;
+
+      if (status === 'in_progress') {
+        // 状态转入进行中时重新开始计时；已在进行中则保留原 start_time 继续计时
+        if (existing.status !== 'in_progress' && req.body.start_time === undefined) {
+          taskData.start_time = new Date().toISOString();
+        }
+        // 清空完成态字段，避免残留旧的结束时间
+        taskData.end_time = null;
+        taskData.time_spent_minutes = null;
+      }
+
+      // 完成任务：保留已有 end_time（反思等二次保存不漂移），否则设为当前时间并计算用时
+      if (status === 'completed') {
+        if (!taskData.end_time) {
+          taskData.end_time = new Date().toISOString();
+        }
+        if (taskData.start_time) {
+          const start = new Date(taskData.start_time);
+          const end = new Date(taskData.end_time);
+          taskData.time_spent_minutes = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
+        }
+      }
+
       const { data, error } = await db.update('task_logs', req.body.id, taskData);
       if (error) throw error;
       savedLog = data;
     } else {
       // 创建新任务
+      if (status === 'in_progress' && !start_time) {
+        taskData.start_time = new Date().toISOString();
+      }
+      if (status === 'completed' && !end_time) {
+        taskData.end_time = new Date().toISOString();
+        if (taskData.start_time) {
+          const start = new Date(taskData.start_time);
+          const end = new Date(taskData.end_time);
+          taskData.time_spent_minutes = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
+        }
+      }
       const { data, error } = await db.insert('task_logs', taskData);
       if (error) throw error;
       savedLog = data;
