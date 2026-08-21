@@ -8,6 +8,7 @@
  */
 
 import { getDatabase } from './database-new';
+import { localDateStr } from './date';
 import {
   isAiAvailable,
   generateAIResponse,
@@ -26,13 +27,6 @@ export interface WeeklyRange {
   weekEnd: string;   // YYYY-MM-DD（周日）
 }
 
-function toDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 /**
  * 计算上一个完整自然周（周一 ~ 周日）的本地日期范围。
  * 对任意星期几调用都正确（周日属于「本周」而非上周）。
@@ -48,7 +42,7 @@ export function getLastWeekRange(from: Date = new Date()): WeeklyRange {
   const lastSunday = new Date(thisMonday);
   lastSunday.setDate(thisMonday.getDate() - 1);
 
-  return { weekStart: toDateStr(lastMonday), weekEnd: toDateStr(lastSunday) };
+  return { weekStart: localDateStr(lastMonday), weekEnd: localDateStr(lastSunday) };
 }
 
 /**

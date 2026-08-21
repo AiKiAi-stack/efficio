@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDatabase } from '../lib/database-new';
+import { localDateStr } from '../lib/date';
 
 export const dailyLogsRouter = Router();
 
@@ -11,7 +12,7 @@ dailyLogsRouter.get('/today', async (req, res) => {
       return res.status(401).json({ success: false, error: '未授权' });
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateStr();
 
     const db = getDatabase();
     const { data, error } = await db.selectSingle('daily_logs', {
@@ -46,7 +47,7 @@ dailyLogsRouter.post('/', async (req, res) => {
       energy_level
     } = req.body;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateStr();
 
     const logData: Record<string, any> = {
       user_id: userId,

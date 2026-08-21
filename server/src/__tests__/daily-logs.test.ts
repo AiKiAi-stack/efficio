@@ -9,6 +9,7 @@ import request from 'supertest';
 import express from 'express';
 import { dailyLogsRouter } from '../routes/dailyLogs';
 import { resetInMemoryStore } from '../lib/database-new';
+import { localDateStr } from '../lib/date';
 
 const app = express();
 app.use(express.json());
@@ -109,5 +110,21 @@ describe('DailyLogs Routes', () => {
     expect(history.status).toBe(200);
     expect(history.body.data.length).toBe(1);
     expect(history.body.data[0].goals).toBe('今天的目标');
+  });
+
+  it('log_date 按本地日历划分（接线 localDateStr，而非 UTC 日期）', async () => {
+    const res = await request(app)
+      .post('/api/daily-logs')
+      .set('x-user-id', USER)
+      .send({ goals: '日界接线验证' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.log_date).toBe(localDateStr());
+
+    const today = await request(app)
+      .get('/api/daily-logs/today')
+      .set('x-user-id', USER);
+    expect(today.status).toBe(200);
+    expect(today.body.data).not.toBeNull();
   });
 });
