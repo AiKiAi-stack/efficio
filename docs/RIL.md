@@ -171,9 +171,45 @@ server jest 133/133（新增 records 4 例 + suggestions.test.ts 4 例），tsc 
   均不依赖显式置 null，安全；新增客户端时需注意。
 - ~~待办：计时不刷新~~ → 已在 6ace6ef 修复。
 - ~~待办：其他路由 IDOR 审计~~ → 已完成（fe1e333），records/suggestions 已修。
-- 待办：根 `package.json` 有 `lint` 脚本但仓库无 eslint 配置，属技术债。
-- 待办：`client/src/api.ts` 除 login/getUserId 外 11 个函数为死代码，
-  且沿用已被修复的 sessionToken 传参模式，存在被误用重新引入 bug 的风险。
+- ~~待办：根 `package.json` lint 脚本无 eslint 配置~~ → 已在 8602b3e 修复
+  （client/.eslintrc.cjs，现 0 error / 20 warning）。
+- ~~待办：`client/src/api.ts` 死代码~~ → 已在 5855497 清理（仅剩 login/getUserId）。
+
+---
+
+## 2026-08-21 · 分支收尾 + daily_logs 本地日界 + run.sh 一键运行
+
+### 发现
+1. 10 个 feat/fix 分支（本地+远程）经核实全部已合并进 main，无未合并内容；
+   实质遗留是 daily_logs 的 UTC 日界问题（与 9b67584 前端日历同类）。
+2. dailyLogs 路由用 `toISOString().split('T')[0]` 划分日界：UTC+8 凌晨 0~8 点
+   保存的日志被归档到昨天，且与前端本地日历日期不一致。
+
+### 修复
+- 新增 `server/src/lib/date.ts` `localDateStr()` 作为本地日界的单一事实来源；
+  dailyLogs 两处接入，report-generator 私有 toDateStr 一并统一（285fc47）。
+- 新增根目录 `run.sh`（无需 Docker/sudo 一键运行：装依赖→构建→启动）：
+  `--rebuild` 强制重建；`--check` 冒烟自检（临时端口+内存库，探 /health、
+  带 X-User-Id 的 API、前端静态托管）；`--dev` 开发模式；
+  依赖安装失败自动换 npmmirror 镜像重试。DEPLOY.md 已补「方案零」。
+
+### 验证
+- 新增 date.test.ts（4 用例，fake timers 固定 UTC+8 边界/跨年时刻）+
+  daily-logs 接线用例；server jest 158/158、client vitest 21/21、tsc 通过。
+- `./run.sh --check` 全绿；端口占用预检实测（3001 被 Docker 容器占用时
+  给出 `PORT=3002` 可操作提示）。
+- 陷阱：探活脚本内 `.then(r=>r.text()).then(t=>...r.ok...)` 的 r 越界引用
+  导致误报失败，已改为闭包内联。
+
+### 分支/远程
+- 删除全部 10 个已合并分支（本地 + origin）；首次 `push --delete` 遇 TLS
+  中断但 GitHub 实际已生效 6 个，重试时 4 个报 ref 不存在即为此故。
+- main 已推送 origin（285fc47），本地与远程均只剩 main。
+
+### 遗留
+- settings 用户隔离（架构决策，需人工）；
+- 20 个 eslint warning（0 error，低优先级）；
+- uitemplate/selectModel.png 为跟踪中的设计稿，去留待定。
 
 ### 环境事实
 - 分支 feat/multi-task-tracker（领先本地 main 数个提交；远端 PR #21 已合并）。
