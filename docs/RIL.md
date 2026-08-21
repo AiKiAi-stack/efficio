@@ -216,3 +216,33 @@ server jest 133/133（新增 records 4 例 + suggestions.test.ts 4 例），tsc 
 - 测试约定：supertest + express 挂载单路由，中文 describe/it；
   内存适配器隔离用 `resetInMemoryStore()`（来自 `lib/database-new` 再导出）。
 - 提交身份：AiKiAi-stack <karsonwan@foxmail.com>（仓库 git config 已配置）。
+
+---
+
+## 2026-08-22 · CLI today 快速打卡 + 与 tracemd 分工收敛
+
+### 发现
+1. 用户真实痛点不是"要不要融合 tracemd"，而是**不知道该用哪个记录**——
+   两者的每日记录/周总结表面重叠，实为两个心智动作（量化复盘 vs 思考流水）。
+2. 决策：不融合、口头桥接；分工收敛为——efficio 只做"30 秒量化打卡"，
+   长文思考/知识沉淀归 tracemd（试运行期不动它）。
+
+### 修复
+- 新增 `lib/quick-log.ts`：payload 映射与 1-5 整数校验、邮箱→id 解析
+  （登录幂等）、HTTP 推送。刻意走运行中的服务而非直连 DB：
+  Docker / run.sh 两种部署写到的都是同一份数据。
+- CLI 新增 `today` 子命令：首次 `--user <email>` 登录后 id 缓存进
+  `~/.config/efficio/efficio.env`（EFFICIO_USER_ID），此后一行打卡。
+- 根 package.json 加 `today` 脚本（75a89d0）。
+
+### 陷阱
+- 全局 `-e/--env` 会吞掉子命令同名短旗标：today 的 energy 改为长名
+  `--energy`，无短旗标。
+
+### 验证
+- quick-log.test.ts 8 用例（注入 fetchImpl，不依赖真实服务）；
+  server jest 166/166、tsc 通过。
+- 内存库临时实例真实冒烟：邮箱登录→缓存 id→免 --user 补丁更新全通过；
+  测试后清理了写入的 EFFICIO_USER_ID。
+- 冒烟同时实证 285fc47 的本地日界修复生效：UTC 17:02 创建的日志
+  log_date 正确为次日（UTC+8 凌晨）。
