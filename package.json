@@ -12,6 +12,7 @@
     "build": "npm run build:client",
     "build:client": "cd client && npm run build",
     "start": "cd server && npm start",
+    "today": "node server/dist/cli.js today",
     "lint": "cd client && npm run lint"
   },
   "keywords": [

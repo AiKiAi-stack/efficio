@@ -11,6 +11,8 @@ import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { configManager } from './lib/config-manager';
+import { pushDailyLog, resolveUserId } from './lib/quick-log';
 
 const program = new Command();
 
@@ -600,6 +602,68 @@ program
       console.log('\n📁 Config File');
       console.log(`  Path:        ${configPath || 'Not found'}`);
       console.log('═══════════════════════════════════════════════════════\n');
+    }
+  });
+
+// ==================== 子命令：快速打卡 ====================
+
+program
+  .command('today')
+  .description('快速打卡当日日志（30 秒量化复盘；长文思考请写 tracemd）')
+  .option('-g, --goals <text>', '今日目标')
+  .option('-a, --accomplished <text>', '完成了什么')
+  .option('-r, --reflection <text>', '一句话反思')
+  .option('-m, --mood <1-5>', '心情分（1-5）')
+  .option('--energy <1-5>', '能量分（1-5；无短旗标，避免与全局 -e/--env 冲突）')
+  .option('--user <id-or-email>', '用户 id 或邮箱（邮箱首次使用后自动记住）')
+  .option('--url <url>', '服务地址', 'http://localhost:3001')
+  .action(async (opts) => {
+    try {
+      let userInput: string | undefined = opts.user;
+      if (!userInput) {
+        userInput = configManager.get('EFFICIO_USER_ID');
+      }
+      if (!userInput) {
+        console.error('✗ 未指定用户。首次使用：');
+        console.error('    npm run today -- --user you@example.com -m 4');
+        console.error('  用户 id 会自动记住，之后直接：npm run today -- -m 4 -e 3');
+        process.exit(1);
+      }
+
+      const userId = await resolveUserId(userInput, opts.url);
+      if (userId !== userInput) {
+        configManager.set('EFFICIO_USER_ID', userId);
+        console.log(`✓ 已记住用户 ${userInput} → ${userId}`);
+      }
+
+      const result = await pushDailyLog(
+        {
+          goals: opts.goals,
+          accomplishments: opts.accomplished,
+          reflection: opts.reflection,
+          moodScore: opts.mood ? parseInt(opts.mood, 10) : undefined,
+          energyLevel: opts.energy ? parseInt(opts.energy, 10) : undefined
+        },
+        { baseUrl: opts.url, userId }
+      );
+
+      const log = result.data || {};
+      const parts: string[] = [];
+      if (log.goals) parts.push(`目标: ${log.goals}`);
+      if (log.accomplishments) parts.push(`完成: ${log.accomplishments}`);
+      if (log.reflection) parts.push(`反思: ${log.reflection}`);
+      if (log.mood_score) parts.push(`心情: ${log.mood_score}/5`);
+      if (log.energy_level) parts.push(`能量: ${log.energy_level}/5`);
+      if (parts.length === 0) parts.push('已开启今日日志（start_time 已记录）');
+
+      console.log(`✓ 已记录 ${log.log_date || '今日'}`);
+      parts.forEach((p) => console.log(`  ${p}`));
+      process.exit(0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`✗ ${msg}`);
+      console.error('  服务没在跑？项目根目录 ./run.sh 或 docker compose up -d');
+      process.exit(1);
     }
   });
 
