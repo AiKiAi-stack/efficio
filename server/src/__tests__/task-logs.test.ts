@@ -203,4 +203,130 @@ describe('TaskLogs Routes', () => {
       expect(check.body.data.task_title).toBe('A 的任务');
     });
   });
+
+  describe('Jira 绑定', () => {
+    it('创建时可直接绑定 jira_key', async () => {
+      const created = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '对接登录', jira_key: 'PROJ-123' });
+
+      expect(created.status).toBe(200);
+      expect(created.body.data.jira_key).toBe('PROJ-123');
+    });
+
+    it('补丁更新未携带 jira_key 时应继承现有值（不清空）', async () => {
+      const created = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '带 Jira 的任务', jira_key: 'PROJ-1', status: 'in_progress' });
+
+      const patched = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ id: created.body.data.id, task_title: '带 Jira 的任务', status: 'completed', outcome: '完成' });
+
+      expect(patched.status).toBe(200);
+      expect(patched.body.data.jira_key).toBe('PROJ-1');
+    });
+
+    it('显式传 null 可解绑 jira_key', async () => {
+      const created = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '要解绑的任务', jira_key: 'PROJ-2' });
+
+      const unbound = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ id: created.body.data.id, task_title: '要解绑的任务', jira_key: null });
+
+      expect(unbound.status).toBe(200);
+      expect(unbound.body.data.jira_key).toBeNull();
+    });
+  });
+
+  describe('子任务', () => {
+    it('创建子任务并返回 parent_id；列表可见', async () => {
+      const parent = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '父任务：搭建登录' });
+
+      const child = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '子任务：写表单校验', parent_id: parent.body.data.id });
+
+      expect(child.status).toBe(200);
+      expect(child.body.data.parent_id).toBe(parent.body.data.id);
+
+      const list = await request(app).get('/api/task-logs').set('x-user-id', USER_A);
+      expect(list.body.data.some((t: any) => t.id === child.body.data.id && t.parent_id === parent.body.data.id)).toBe(true);
+    });
+
+    it('parent_id 指向不存在的任务应返回 400', async () => {
+      const res = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '孤儿子任务', parent_id: 'no-such-task' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('parent_id 指向他人任务应返回 404（防越权挂载）', async () => {
+      const others = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_B)
+        .send({ task_title: 'B 的任务' });
+
+      const res = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '偷挂子任务', parent_id: others.body.data.id });
+
+      expect(res.status).toBe(404);
+    });
+
+    it('禁止二级嵌套：parent 不能本身是子任务', async () => {
+      const parent = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '顶层任务' });
+
+      const child = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '一级子任务', parent_id: parent.body.data.id });
+
+      const grandchild = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '二级子任务', parent_id: child.body.data.id });
+
+      expect(grandchild.status).toBe(400);
+    });
+
+    it('删除父任务后子任务提升为顶层（parent_id 置空）', async () => {
+      const parent = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '将被删除的父任务' });
+
+      const child = await request(app)
+        .post('/api/task-logs')
+        .set('x-user-id', USER_A)
+        .send({ task_title: '幸存的子任务', parent_id: parent.body.data.id });
+
+      await request(app)
+        .delete(`/api/task-logs/${parent.body.data.id}`)
+        .set('x-user-id', USER_A);
+
+      const check = await request(app)
+        .get(`/api/task-logs/${child.body.data.id}`)
+        .set('x-user-id', USER_A);
+      expect(check.body.data).not.toBeNull();
+      expect(check.body.data.parent_id).toBeNull();
+    });
+  });
 });

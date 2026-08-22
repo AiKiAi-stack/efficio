@@ -20,6 +20,8 @@ function mockTask(overrides: Record<string, any> = {}) {
     priority: 'medium',
     estimated_duration: null,
     tags: null,
+    jira_key: null,
+    parent_id: null,
     created_at: '2026-08-19T09:00:00.000Z',
     ...overrides,
   };
@@ -38,6 +40,7 @@ describe('TaskTracker Component', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     cleanup();
   });
 
@@ -151,5 +154,72 @@ describe('TaskTracker Component', () => {
       expect(screen.getByText(/实际用时 1小时30分/)).toBeInTheDocument();
     });
     expect(screen.getByText(/完成内容：/)).toBeInTheDocument();
+  });
+
+  it('已绑定的任务应显示 Jira 徽章，未绑定显示绑定入口', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockFetchResponse([
+        mockTask({ id: '1', task_title: '有单号', jira_key: 'PROJ-7' }),
+        mockTask({ id: '2', task_title: '没单号' }),
+      ])
+    );
+
+    render(<TaskTracker />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/PROJ-7/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/\+ 绑定 Jira/i)).toBeInTheDocument();
+
+    // 点击未绑定任务的绑定入口 → prompt 输入单号 → POST 携带 jira_key
+    vi.spyOn(window, 'prompt').mockReturnValueOnce('PROJ-9');
+    fireEvent.click(screen.getByText(/\+ 绑定 Jira/i));
+
+    await waitFor(() => {
+      const post = vi
+        .mocked(fetch)
+        .mock.calls.find(([, init]) => (init as RequestInit)?.method === 'POST');
+      expect(post).toBeTruthy();
+      const body = JSON.parse((post![1] as RequestInit).body as string);
+      expect(body.id).toBe('2');
+      expect(body.jira_key).toBe('PROJ-9');
+    });
+  });
+
+  it('子任务应嵌套渲染在父卡片内并显示进度，回车创建携带 parent_id', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      mockFetchResponse([
+        mockTask({ id: 'p1', task_title: '父任务' }),
+        mockTask({ id: 'c1', task_title: '子任务一', parent_id: 'p1', status: 'completed' }),
+        mockTask({ id: 'c2', task_title: '子任务二', parent_id: 'p1', status: 'pending' }),
+      ])
+    );
+
+    render(<TaskTracker />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/子任务 1\/2/)).toBeInTheDocument();
+    });
+    expect(screen.getByText('子任务一')).toBeInTheDocument();
+    expect(screen.getByText('子任务二')).toBeInTheDocument();
+
+    // 父卡片只渲染一次，子任务不重复作为独立卡片出现
+    expect(screen.getAllByText('父任务').length).toBe(1);
+
+    // 在子任务输入框回车 → POST 携带 parent_id
+    fireEvent.change(screen.getByPlaceholderText(/\+ 子任务/), {
+      target: { value: '子任务三' },
+    });
+    fireEvent.keyDown(screen.getByPlaceholderText(/\+ 子任务/), { key: 'Enter' });
+
+    await waitFor(() => {
+      const post = vi
+        .mocked(fetch)
+        .mock.calls.find(([, init]) => (init as RequestInit)?.method === 'POST');
+      expect(post).toBeTruthy();
+      const body = JSON.parse((post![1] as RequestInit).body as string);
+      expect(body.task_title).toBe('子任务三');
+      expect(body.parent_id).toBe('p1');
+    });
   });
 });

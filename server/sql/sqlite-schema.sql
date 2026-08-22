@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS task_logs (
     priority TEXT,
     estimated_duration TEXT,  -- 预计完成周期（如：半天 / 1天 / 1周）
     tags TEXT,  -- JSON 数组字符串
+    jira_key TEXT,  -- 绑定的 Jira issue key（可选，如 PROJ-123）
+    parent_id TEXT,  -- 父任务 id（仅一级嵌套；NULL 为顶层任务）
 
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),

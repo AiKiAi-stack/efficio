@@ -15,6 +15,8 @@ interface TaskLog {
   priority: string | null;
   estimated_duration: string | null;
   tags: string[] | null;
+  jira_key: string | null;
+  parent_id: string | null;
   created_at: string;
 }
 
@@ -63,15 +65,18 @@ function elapsedSince(iso: string | null): string {
 
 interface TaskCardProps {
   task: TaskLog;
+  subtasks: TaskLog[];
   onChanged: () => void;
   onError: (msg: string) => void;
 }
 
-function TaskCard({ task, onChanged, onError }: TaskCardProps) {
+function TaskCard({ task, subtasks, onChanged, onError }: TaskCardProps) {
   const userId = getUserId();
   const [outcome, setOutcome] = useState(task.outcome || '');
   const [reflection, setReflection] = useState(task.reflection || '');
   const [saving, setSaving] = useState(false);
+  const [childTitle, setChildTitle] = useState('');
+  const [addingChild, setAddingChild] = useState(false);
 
   const save = async (patch: Partial<TaskLog>) => {
     if (!userId) return;
@@ -87,6 +92,7 @@ function TaskCard({ task, onChanged, onError }: TaskCardProps) {
           task_category: task.task_category,
           priority: task.priority,
           estimated_duration: task.estimated_duration,
+          jira_key: task.jira_key,
           outcome,
           reflection,
           status: task.status,
@@ -103,6 +109,39 @@ function TaskCard({ task, onChanged, onError }: TaskCardProps) {
       onError('保存失败，请重试');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const bindJira = () => {
+    const input = window.prompt(
+      '输入要绑定的 Jira 单号（如 PROJ-123，留空则解绑）：',
+      task.jira_key || ''
+    );
+    if (input === null) return;
+    save({ jira_key: input.trim() || null });
+  };
+
+  const addChild = async () => {
+    const title = childTitle.trim();
+    if (!title || !userId) return;
+    setAddingChild(true);
+    try {
+      const res = await fetch(`${API_URL}/task-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+        body: JSON.stringify({ task_title: title, parent_id: task.id, status: 'pending' })
+      });
+      const data = await res.json();
+      if (data.data) {
+        setChildTitle('');
+        onChanged();
+      } else {
+        onError(data.error || '创建子任务失败');
+      }
+    } catch (error) {
+      onError('创建子任务失败，请重试');
+    } finally {
+      setAddingChild(false);
     }
   };
 
@@ -146,9 +185,23 @@ function TaskCard({ task, onChanged, onError }: TaskCardProps) {
                 预计 {task.estimated_duration}
               </span>
             )}
+            {task.jira_key && (
+              <button
+                onClick={bindJira}
+                className="px-1.5 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 transition"
+                title="点击修改或解绑 Jira 单号"
+              >
+                🔗 {task.jira_key}
+              </button>
+            )}
           </div>
           <h3 className={`text-sm font-semibold text-gray-800 mt-1.5 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
             {task.task_title}
+            {subtasks.length > 0 && (
+              <span className="ml-1.5 text-xs font-normal text-gray-400">
+                子任务 {subtasks.filter(s => s.status === 'completed').length}/{subtasks.length}
+              </span>
+            )}
           </h3>
           {task.task_description && (
             <p className="text-xs text-gray-500 mt-0.5">{task.task_description}</p>
@@ -158,6 +211,11 @@ function TaskCard({ task, onChanged, onError }: TaskCardProps) {
             {task.status === 'in_progress' && <span className="text-blue-500">{elapsedSince(task.start_time)}</span>}
             {task.status === 'completed' && task.time_spent_minutes != null && (
               <span>实际用时 {formatDuration(task.time_spent_minutes)}</span>
+            )}
+            {!task.jira_key && (
+              <button onClick={bindJira} className="hover:text-indigo-500 transition" title="绑定 Jira 单号">
+                + 绑定 Jira
+              </button>
             )}
           </div>
         </div>
@@ -222,6 +280,99 @@ function TaskCard({ task, onChanged, onError }: TaskCardProps) {
           </div>
         )}
       </div>
+
+      {/* 子任务区 */}
+      <div className="mt-3 pt-2 border-t border-gray-100">
+        {subtasks.length > 0 && (
+          <div className="space-y-1.5 mb-2">
+            {[...subtasks]
+              .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+              .map((st) => (
+                <SubTaskRow key={st.id} task={st} onChanged={onChanged} onError={onError} />
+              ))}
+          </div>
+        )}
+        <div className="flex gap-1.5">
+          <input
+            type="text"
+            value={childTitle}
+            onChange={(e) => setChildTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') addChild(); }}
+            className="flex-1 min-w-0 px-2 py-1 text-xs border border-gray-200 rounded focus:ring-1 focus:ring-blue-400"
+            placeholder="+ 子任务，回车添加"
+          />
+          {childTitle.trim() && (
+            <button
+              onClick={addChild}
+              disabled={addingChild}
+              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition"
+            >
+              {addingChild ? '...' : '添加'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 子任务轻量行：状态点 + 标题 + 悬浮操作 */
+function SubTaskRow({ task, onChanged, onError }: { task: TaskLog; onChanged: () => void; onError: (msg: string) => void }) {
+  const userId = getUserId();
+
+  const patch = async (data: Partial<TaskLog>) => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_URL}/task-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+        body: JSON.stringify({ id: task.id, task_title: task.task_title, ...data })
+      });
+      const resData = await res.json();
+      if (resData.data) {
+        onChanged();
+      } else {
+        onError(resData.error || '操作失败');
+      }
+    } catch (error) {
+      onError('操作失败，请重试');
+    }
+  };
+
+  const del = async () => {
+    if (!userId) return;
+    try {
+      await fetch(`${API_URL}/task-logs/${task.id}`, {
+        method: 'DELETE',
+        headers: { 'X-User-Id': userId }
+      });
+      onChanged();
+    } catch (error) {
+      onError('删除失败，请重试');
+    }
+  };
+
+  const dotCls =
+    task.status === 'completed' ? 'bg-green-500'
+    : task.status === 'in_progress' ? 'bg-blue-500 animate-pulse'
+    : 'bg-gray-300';
+
+  return (
+    <div className="flex items-center gap-2 group">
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotCls}`} />
+      <span className={`text-xs flex-1 min-w-0 truncate ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+        {task.task_title}
+      </span>
+      {task.jira_key && <span className="text-[10px] text-indigo-400 shrink-0">🔗{task.jira_key}</span>}
+      <span className="text-[10px] text-gray-300 shrink-0 hidden group-hover:inline">
+        {task.status === 'pending' && (
+          <button onClick={() => patch({ status: 'in_progress' })} className="text-blue-500 hover:text-blue-700" title="开始">▶</button>
+        )}
+        {task.status === 'in_progress' && (
+          <button onClick={() => patch({ status: 'completed', outcome: null })} className="text-green-500 hover:text-green-700 ml-1" title="完成">✓</button>
+        )}
+        <button onClick={del} className="text-gray-400 hover:text-red-500 ml-1" title="删除">🗑</button>
+      </span>
     </div>
   );
 }
@@ -324,13 +475,22 @@ export default function TaskTracker() {
   };
 
   const counts = {
-    all: tasks.length,
-    in_progress: tasks.filter(t => t.status === 'in_progress').length,
-    pending: tasks.filter(t => t.status === 'pending').length,
-    completed: tasks.filter(t => t.status === 'completed').length
+    all: tasks.filter(t => !t.parent_id).length,
+    in_progress: tasks.filter(t => !t.parent_id && t.status === 'in_progress').length,
+    pending: tasks.filter(t => !t.parent_id && t.status === 'pending').length,
+    completed: tasks.filter(t => !t.parent_id && t.status === 'completed').length
   };
 
-  const filteredTasks = filter === 'all' ? tasks : tasks.filter(t => t.status === filter);
+  // 树形组织：顶层任务卡片 + 各自的子任务；状态过滤时父任务自身或任一子任务命中即显示
+  const childMap: Record<string, TaskLog[]> = {};
+  tasks.forEach((t) => {
+    if (!t.parent_id) return;
+    (childMap[t.parent_id] ||= []).push(t);
+  });
+  const matchesFilter = (t: TaskLog) => filter === 'all' || t.status === filter;
+  const filteredTasks = tasks.filter(
+    (t) => !t.parent_id && (matchesFilter(t) || (childMap[t.id] || []).some(matchesFilter))
+  );
 
   const filterTabs: Array<{ key: Filter; label: string }> = [
     { key: 'all', label: `全部 ${counts.all}` },
@@ -465,7 +625,13 @@ export default function TaskTracker() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredTasks.map((task) => (
-            <TaskCard key={task.id} task={task} onChanged={loadTasks} onError={showError} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              subtasks={childMap[task.id] || []}
+              onChanged={loadTasks}
+              onError={showError}
+            />
           ))}
         </div>
       )}

@@ -285,6 +285,16 @@ export class SQLiteAdapter implements IDatabaseAdapter {
         table: 'task_logs',
         column: 'estimated_duration',
         ddl: 'ALTER TABLE task_logs ADD COLUMN estimated_duration TEXT'
+      },
+      {
+        table: 'task_logs',
+        column: 'jira_key',
+        ddl: 'ALTER TABLE task_logs ADD COLUMN jira_key TEXT'
+      },
+      {
+        table: 'task_logs',
+        column: 'parent_id',
+        ddl: 'ALTER TABLE task_logs ADD COLUMN parent_id TEXT'
       }
     ];
 
