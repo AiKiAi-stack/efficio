@@ -246,3 +246,29 @@ server jest 133/133（新增 records 4 例 + suggestions.test.ts 4 例），tsc 
   测试后清理了写入的 EFFICIO_USER_ID。
 - 冒烟同时实证 285fc47 的本地日界修复生效：UTC 17:02 创建的日志
   log_date 正确为次日（UTC+8 凌晨）。
+
+---
+
+## 2026-08-22（晚）· 任务绑定 Jira 单号 + 子任务
+
+### 实现（dc56e83）
+1. **Jira 绑定**：task_logs.jira_key；存量库走 migrateIfNeeded 自动加列；
+   补丁更新未携带时继承（同 tags 模式），显式 null 解绑；
+   前端卡片徽章可点击改绑/解绑，未绑定显示"+ 绑定 Jira"入口。
+2. **子任务**：task_logs.parent_id，仅一级嵌套。领域规则：
+   父必须存在且属同一用户（404 防越权挂载）、父不能本身是子任务（400）、
+   删父后子任务提升为顶层（parent_id 置空，不级联删除）。
+   前端父卡片内联回车创建子任务、进度 n/m、状态点行悬浮操作；
+   状态过滤时父自身或任一子任务命中即显示。
+
+### 顺手修复（61831ba）
+records.test.ts 未 mock AI 模块——本机配了真实 DEEPSEEK_API_KEY，
+isAiAvailable() 为真导致单测发起真实 DeepSeek 请求，套件 15~33 秒
+且随机超时。git stash A/B 验证为存量问题非本次回归。mock 后
+analyzeWithoutAI 按关键词返回确定性分类，保留断言意图，2 秒稳定。
+
+### 验证
+server jest 174/174（+8 task-logs 用例）、client vitest 23/23（+2）、
+tsc 双侧通过、vite build 通过。
+陷阱备忘：validateParentId 返回判别联合 {ok:true}|{ok:false,...} 时
+`if (!check.ok)` 在该 TS 版本不收窄，改为返回 null | {status,error}。
