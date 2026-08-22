@@ -2,6 +2,19 @@ import request from 'supertest';
 import express from 'express';
 import { recordsRouter } from '../routes/records';
 
+// 关键：mock 掉 AI 模块。本机配置了真实 API key 时，
+// 不 mock 会导致单测发起真实网络请求（DeepSeek），延迟波动造成偶发超时。
+// analyzeWithoutAI 按关键词返回确定性分类，保持"内容→分类"的测试意图。
+jest.mock('../lib/ai', () => ({
+  isAiAvailable: jest.fn().mockReturnValue(false),
+  generateAIResponse: jest.fn().mockResolvedValue('{}'),
+  analyzeWithoutAI: jest.fn((text: string) => ({
+    task_category: /会议|评审|meeting/i.test(text) ? 'meeting' : 'development',
+    tools_used: ['VSCode', 'Git'].filter((t) => text.includes(t))
+  })),
+  classifyAIError: jest.fn().mockReturnValue({ type: 'mock' })
+}));
+
 // 创建测试用的 Express 应用
 const app = express();
 app.use(express.json());
